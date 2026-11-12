@@ -44,5 +44,8 @@ export const LT_PATHS = {
 
 export const STEP_PAGE_SIZE = 500;
 
+/** Connections the provider keeps for counting workflows in the executions list. */
+export const COUNT_POOL_SIZE = 2;
+
 /** Reason sent when the recv deadline passes before Long Tail delivered an outcome. */
 export const CLOSE_REASON_DEADLINE = 'wait-deadline';

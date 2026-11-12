@@ -1,15 +1,17 @@
 # Fully local: Postgres, Long Tail (API + dashboard + relay) and a DBOS app. Nothing calls out.
-# Run scripts/pack-long-tail.sh, then: docker compose up -d --build
-# Start a review: curl -X POST localhost:4000/orders/42, then resolve it at http://localhost:3000
+# docker compose up -d --build (scripts/pack-long-tail.sh tests an unreleased long-tail build)
+# Start a review: curl -X POST localhost:4000/orders/42, then resolve it at http://localhost:3400
 services:
   postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
+      POSTGRES_DB: longtail
     volumes:
-      - ./docker/init-databases.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${PG_PORT:-5425}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 2s
@@ -19,13 +21,15 @@ services:
   long-tail:
     build: { context: ., target: runtime }
     environment:
+      # DBOS keeps its system tables in this database, in the dbos schema.
       DATABASE_URL: postgresql://postgres:password@postgres:5432/longtail
-      DBOS_SYSTEM_DATABASE_URL: postgresql://postgres:password@postgres:5432/dbos_review_order
-      LT_START_CONFIG: /config/longtail.json
-    volumes:
-      - ./examples/review-order/longtail.json:/config/longtail.json:ro
+      PORT: 3000
+      JWT_SECRET: ${JWT_SECRET:-change-me-local-only}
+      LT_ADMIN_USER: superadmin
+      LT_ADMIN_PASSWORD: ${LT_ADMIN_PASSWORD:-l0ngt@1l}
+      LT_ROLES: reviewer
     ports:
-      - "${LT_PORT:-3000}:3000"
+      - "${LT_PORT:-3400}:3000"
     depends_on:
       postgres: { condition: service_healthy }
 
@@ -33,9 +37,11 @@ services:
     build: { context: ., target: example }
     environment:
       LT_URL: http://long-tail:3000
-      LT_ADMIN_USER: admin
-      LT_ADMIN_PASSWORD: admin-local-only
-      DBOS_SYSTEM_DATABASE_URL: postgresql://postgres:password@postgres:5432/dbos_review_order
+      LT_API_KEY: ${LT_API_KEY:-}
+      # Local demo: with no LT_API_KEY, the app signs in as the admin and mints a bot key.
+      LT_ADMIN_USER: superadmin
+      LT_ADMIN_PASSWORD: ${LT_ADMIN_PASSWORD:-l0ngt@1l}
+      DBOS_SYSTEM_DATABASE_URL: postgresql://postgres:password@postgres:5432/longtail
       # Stable identity per replica: a restarted container recovers its own parked waits.
       DBOS__VMID: review-order-1
       # Pinned version: a redeploy recovers waits parked by earlier code. Change code paths with DBOS.patch.

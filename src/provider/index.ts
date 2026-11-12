@@ -1,4 +1,5 @@
 import { DBOSClient, Error as DBOSErrors } from '@dbos-inc/dbos-sdk';
+import { Pool } from 'pg';
 import {
   DELIVERY_RESULT,
   type LTDeliveryResult,
@@ -8,9 +9,12 @@ import {
   type LTWaitOutcome,
   type LTWaitRef,
   type LTWorkflowExecution,
+  type LTWorkflowListQuery,
+  type LTWorkflowPage,
 } from '@hotmeshio/long-tail';
 
-import { PROVIDER_NAME, STEP_PAGE_SIZE } from '../constants';
+import { COUNT_POOL_SIZE, PROVIDER_NAME, STEP_PAGE_SIZE } from '../constants';
+import { createWorkflowCounter, listFilter, type WorkflowCounter } from './list';
 import { isTerminal, toJobStatus } from './status';
 import { buildExecution, type DbosStep } from './steps-map';
 
@@ -22,10 +26,10 @@ export interface DbosProviderConfig {
 }
 
 /** The subset of DBOSClient the provider calls. */
-export type DbosClientLike = Pick<DBOSClient, 'getWorkflow' | 'listWorkflowSteps' | 'send' | 'cancelWorkflow' | 'destroy'>;
+export type DbosClientLike = Pick<DBOSClient, 'getWorkflow' | 'listWorkflows' | 'listWorkflowSteps' | 'send' | 'cancelWorkflow' | 'destroy'>;
 
 export interface DbosProvider extends LTDurableProvider {
-  /** Release the client's database pool. */
+  /** Release the client's and the counter's database pools. */
   close(): Promise<void>;
 }
 
@@ -36,13 +40,23 @@ export async function dbosProvider(config: DbosProviderConfig): Promise<DbosProv
     systemDatabaseUrl: config.systemDatabaseUrl,
     ...(config.systemDatabaseSchemaName ? { systemDatabaseSchemaName: config.systemDatabaseSchemaName } : {}),
   });
-  return createDbosProvider(client);
+  // DBOSClient lists but does not count; the executions list needs a total.
+  const pool = new Pool({ connectionString: config.systemDatabaseUrl, max: COUNT_POOL_SIZE });
+  const provider = createDbosProvider(client, createWorkflowCounter(pool, config.systemDatabaseSchemaName));
+  return {
+    ...provider,
+    async close() {
+      await provider.close();
+      await pool.end();
+    },
+  };
 }
 
-export function createDbosProvider(client: DbosClientLike): DbosProvider {
+/** Without a counter the provider does not list. */
+export function createDbosProvider(client: DbosClientLike, countWorkflows?: WorkflowCounter): DbosProvider {
   return {
     name: PROVIDER_NAME,
-    capabilities: { native: false, execution: true, terminate: true },
+    capabilities: { native: false, execution: true, terminate: true, list: !!countWorkflows },
 
     async deliver(ref: LTWaitRef, outcome: LTWaitOutcome): Promise<LTDeliveryResult> {
       // A send to a finished workflow is stored and never read, so check first.
@@ -71,6 +85,17 @@ export function createDbosProvider(client: DbosClientLike): DbosProvider {
       await client.cancelWorkflow(workflowId);
     },
 
+    ...(countWorkflows ? {
+      async list(query: LTWorkflowListQuery): Promise<LTWorkflowPage> {
+        const filter = listFilter(query);
+        const [rows, total] = await Promise.all([
+          client.listWorkflows({ ...filter, limit: query.limit, offset: query.offset, sortDesc: true, loadInput: false, loadOutput: false }),
+          countWorkflows(query),
+        ]);
+        return { workflows: rows.map((row) => toJobStatus(row.workflowID, row)), total };
+      },
+    } : {}),
+
     close: () => client.destroy(),
   };
 }
@@ -86,3 +111,4 @@ async function allSteps(client: DbosClientLike, workflowId: string): Promise<Dbo
 
 export { buildExecution, type DbosStep } from './steps-map';
 export { toJobStatus, toJobState, isTerminal } from './status';
+export { createWorkflowCounter, countWorkflowsSql, listFilter, LIST_STATE_STATUSES, type WorkflowCounter } from './list';

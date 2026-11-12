@@ -1,5 +1,0 @@
-{
-  "auth": { "secret": "change-me-local-only" },
-  "seed": { "admin": { "externalId": "admin", "password": "admin-local-only" } },
-  "roles": [{ "role": "reviewer", "title": "Reviewer", "description": "Approves orders before they ship" }]
-}

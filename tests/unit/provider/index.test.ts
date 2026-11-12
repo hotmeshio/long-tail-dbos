@@ -22,9 +22,10 @@ describe('DBOS provider', () => {
     client.getWorkflow.mockResolvedValue({ workflowID: 'wf-1', status: 'PENDING', workflowName: 'reviewOrder', createdAt: 0 });
   });
 
-  it('is a non-native provider with execution and terminate', () => {
+  it('is a non-native provider with execution and terminate, and no list without a counter', () => {
     expect(provider.name).toBe('dbos');
-    expect(provider.capabilities).toEqual({ native: false, execution: true, terminate: true });
+    expect(provider.capabilities).toEqual({ native: false, execution: true, terminate: true, list: false });
+    expect(provider.list).toBeUndefined();
   });
 
   it('delivers to a waiting workflow on the wait key, keyed by escalation id', async () => {

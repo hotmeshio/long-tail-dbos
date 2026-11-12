@@ -3,7 +3,7 @@
 import { DBOS, DBOSClient } from '@dbos-inc/dbos-sdk';
 import { writeFileSync } from 'fs';
 
-const SYS = 'postgresql://postgres:password@localhost:5415/lt_dbos_probe_sys';
+const SYS = `postgresql://postgres:password@localhost:${process.env.PG_PORT ?? 5425}/lt_dbos_probe_sys`;
 
 async function childFn(x: number) { return x * 2; }
 const child = DBOS.registerWorkflow(childFn, { name: 'probeChild' });

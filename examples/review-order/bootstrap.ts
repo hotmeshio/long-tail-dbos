@@ -10,7 +10,12 @@ export async function bootstrapApiKey(url: string): Promise<string> {
   const bots = await call<Array<{ id: string; external_id: string }> | { bots: Array<{ id: string; external_id: string }> }>(url, 'GET', '/api/bot-accounts', token);
   const list = Array.isArray(bots) ? bots : bots.bots;
   const bot = list.find((b) => b.external_id === BOT.name) ?? (await call<{ id: string }>(url, 'POST', '/api/bot-accounts', token, BOT));
-  const key = await call<{ rawKey: string }>(url, 'POST', `/api/bot-accounts/${bot.id}/api-keys`, token, { name: `review-order-${Date.now()}` });
+  const key = await call<{ id: string; rawKey: string }>(url, 'POST', `/api/bot-accounts/${bot.id}/api-keys`, token, { name: `review-order-${Date.now()}` });
+  // Each boot mints a key; revoke the older ones so keys do not pile up.
+  const keys = await call<Array<{ id: string }> | { keys: Array<{ id: string }> }>(url, 'GET', `/api/bot-accounts/${bot.id}/api-keys`, token);
+  for (const old of (Array.isArray(keys) ? keys : keys.keys).filter((k) => k.id !== key.id)) {
+    await call(url, 'DELETE', `/api/bot-accounts/${bot.id}/api-keys/${old.id}`, token);
+  }
   return key.rawKey;
 }
 

@@ -40,17 +40,28 @@ export const reviewOrder = DBOS.registerWorkflow(reviewOrderFn, { name: 'reviewO
 
 The workflow parks in `DBOS.recv`. An escalation appears in the `reviewer` queue in the Long Tail dashboard. A reviewer claims it, fills in the role's form, and submits. Long Tail delivers one terminal outcome back to the workflow, which carries on.
 
+### `conditional()` at a glance
+
+```ts
+const answer = await conditional<T>(key, ask);
+```
+
+- `key` names the wait within the workflow. Opening the same key again returns the same escalation, so a retried step never creates a second one.
+- `ask` describes the escalation: `role` (the queue), `type`, `description`, `priority` (1 to 4), `metadata` (searchable facets), `data` (shown to the resolver) and `timeout` (the SLA, such as `'48h'`).
+- `answer` is the resolver's payload, typed as `T`, or `null` when the escalation expired or was cancelled.
+
+The same call works in HotMesh and Temporal workflows. Long Tail's documentation is at [hotmesh.io](https://hotmesh.io/docs/start/quickstart); [conditional()](https://hotmesh.io/docs/build/conditional) covers roles, forms and facets in depth.
+
 ## Getting started in five minutes
 
-You need Docker, Node 20+ and a sibling checkout of [long-tail](https://github.com/hotmeshio/long-tail) built with `npm run build`.
+You need Docker.
 
 ```bash
-./scripts/pack-long-tail.sh              # packs ../long-tail into vendor/ for the image
 docker compose up -d --build             # Postgres, Long Tail, and the example DBOS app
 curl -X POST localhost:4000/orders/42    # starts reviewOrder for order 42
 ```
 
-Open http://localhost:3000, sign in as `admin` / `admin-local-only`, open the **reviewer** queue, claim the review for order 42 and resolve it. The app logs the result.
+Open http://localhost:3400, sign in as `superadmin` / `l0ngt@1l` (set `LT_ADMIN_PASSWORD` in `.env` to change it), open the **reviewer** queue, claim the review for order 42 and resolve it. The app logs the result.
 
 Try the restart story while the review is waiting:
 
@@ -60,7 +71,15 @@ docker compose restart review-order      # the app goes away mid-wait
 # resolve order 43 in the dashboard; the restarted app recovers the workflow and it completes
 ```
 
-Everything in `docker-compose.yml` is local: one Postgres server holding the Long Tail database and the DBOS system database, the Long Tail container (API, dashboard and delivery relay) and the example app. Nothing calls out to the internet. Set `LT_PORT` or `APP_PORT` if 3000 or 4000 are taken.
+Everything in `docker-compose.yml` is local: one Postgres database, `longtail`, holding Long Tail's tables and DBOS's system tables (in the `dbos` schema), the Long Tail container (API, dashboard and delivery relay) and the example app. Nothing calls out to the internet.
+
+| Port | Service | Override |
+|---|---|---|
+| 3400 | Long Tail dashboard and API | `LT_PORT` |
+| 4000 | The example DBOS app | `APP_PORT` |
+| 5425 | Postgres (`longtail`) | `PG_PORT` |
+
+The example app mints its own Long Tail bot key at startup by signing in as the admin. That is a local convenience; in production, set `LT_API_KEY`.
 
 ### In your own app
 
@@ -80,7 +99,18 @@ await DBOS.launch();
 - Import the package before `DBOS.launch()`. DBOS requires steps to be registered first, and the package says so clearly if the order is wrong.
 - `LT_API_KEY` is a Long Tail bot account key (create the bot and its key once in the dashboard) whose roles allow creating escalations in the roles your workflows use.
 
-Run Long Tail with the provider, either from this repo's image (`node build/start.js`, configured by `DATABASE_URL`, `DBOS_SYSTEM_DATABASE_URL` and an optional `LT_START_CONFIG` JSON file for roles and seed users) or in your own code:
+Run Long Tail with the provider, either from this repo's image (`node build/start.js`) or in your own code. The image reads its configuration from the environment:
+
+| Variable | Meaning |
+|---|---|
+| `DBOS_SYSTEM_DATABASE_URL` | The DBOS system database your app uses. Long Tail reads it to deliver outcomes and to show the timeline. Defaults to `DATABASE_URL`: one database, with DBOS's tables in the `dbos` schema. |
+| `DATABASE_URL` or `POSTGRES_HOST/PORT/USER/PASSWORD/DB` | Long Tail's database. |
+| `PORT`, `JWT_SECRET` | Long Tail's HTTP port and token secret. |
+| `LT_ADMIN_USER`, `LT_ADMIN_PASSWORD`, `LT_ADMIN_EMAIL` | The seeded admin. |
+| `LT_ROLES` | Comma-separated roles to create, such as `reviewer,finance`. |
+| `LT_START_CONFIG` | Optional JSON file with further `start()` settings, such as role titles or SSO. |
+
+In your own code:
 
 ```ts
 import { start } from '@hotmeshio/long-tail';
@@ -127,13 +157,17 @@ Long Tail opens a wait once per `(workflowId, key)`, so a retried `lt.open` step
 
 ### What does the dashboard show for a DBOS workflow?
 
-All of the escalation work surfaces: queues, claims, forms, history, analytics, roles and users. The workflow execution page builds its timeline from DBOS's own records (`getWorkflow` and `listWorkflowSteps`):
+All of the escalation work surfaces: queues, claims, forms, history, analytics, roles and users.
+
+**Executions** (under Workflows in the sidebar) lists DBOS workflows, newest first. It filters by workflow id prefix, workflow type and state. Running covers `PENDING`, `ENQUEUED`, `DELAYED` and `SUSPENDED`; failed covers `ERROR`, `CANCELLED` and `MAX_RECOVERY_ATTEMPTS_EXCEEDED`. The rows come from `DBOSClient.listWorkflows`. The total comes from a count over the `workflow_status` table in the DBOS system database, with the same filters, because the client lists but does not count.
+
+The workflow execution page builds its timeline from DBOS's own records (`getWorkflow` and `listWorkflowSteps`):
 
 - steps as activities;
-- the wait as a span from `lt.open` to the `recv` that ended it;
+- the wait as a span from `lt.open` to the `recv` that read the outcome;
 - timers, child workflows and failures.
 
-DBOS records step outputs but not step inputs, so the timeline shows outputs and the workflow's input.
+DBOS records step outputs but not step inputs, so the timeline shows outputs and the workflow's input. The wait ends when the workflow read the outcome; if the app was down when someone resolved, the escalation shows the resolve time.
 
 Pages that only make sense on HotMesh (YAML pipelines, stream tables, control plane, triage and AI query) are hidden. Their API routes answer 501 with a message naming the engine.
 
@@ -154,7 +188,7 @@ DBOS Cloud and Conductor are a possible later follow-on; nothing here depends on
 
 ### Do I need anything besides Postgres?
 
-No. The DBOS system tables and the Long Tail tables can share one Postgres server, as separate databases or schemas. The Long Tail container needs no other service. If you already run NATS for Long Tail events you can keep it, but it is optional.
+No. By default DBOS keeps its system tables in Long Tail's database, in the `dbos` schema, so one Postgres database serves both. Separate databases work too: set `DBOS_SYSTEM_DATABASE_URL`. The Long Tail container needs no other service. If you already run NATS for Long Tail events you can keep it, but it is optional.
 
 ### What is the license?
 
@@ -168,7 +202,6 @@ See [LICENSE](LICENSE); its summary is a convenience and the license text govern
 ### What is out of scope today?
 
 - Batch and accumulate escalations, where one row collects many items.
-- Listing DBOS workflows in the dashboard.
 - Starting DBOS workflows from Long Tail.
 - DBOS schedules.
 - Running HotMesh and DBOS workflows in one deployment.
@@ -180,9 +213,11 @@ See [LICENSE](LICENSE); its summary is a convenience and the license text govern
 npm install
 npm test                    # unit tests, no services needed
 npm run test:integration    # Long Tail and DBOS in process against Postgres
+npm run test:e2e            # the running stack over HTTP (docker compose up -d --build)
 npm run build
 npm run probe               # re-records tests/fixtures/dbos-run.json from a real DBOS run
 ```
 
-- The integration tests expect Postgres on `localhost:5415`, which Long Tail's docker compose provides. They create and drop only their own databases, `lt_dbos_e2e` and `lt_dbos_e2e_sys`.
-- `@hotmeshio/long-tail` is linked from a sibling checkout (`file:../long-tail`) until 0.35.0 is published. The dependency then becomes `^0.35.0`, and the image installs it from npm instead of `vendor/`.
+- The integration tests use this repo's Postgres (`docker compose up -d postgres`, port 5425; set `PG_PORT` to point elsewhere). They create and drop only their own database, `lt_dbos_e2e`.
+- The end-to-end tests drive the compose stack the way a deployment runs: they start reviews through the app on port 4000 and work them through Long Tail on port 3400 as people and bots would. `LT_URL`, `APP_URL`, `LT_ADMIN_USER` and `LT_ADMIN_PASSWORD` point them elsewhere. Each run uses unique ids, so it can run repeatedly against one stack.
+- The image installs `@hotmeshio/long-tail` from npm. To try an unreleased build, run `./scripts/pack-long-tail.sh ../long-tail`; the image then installs `vendor/*.tgz` instead.
