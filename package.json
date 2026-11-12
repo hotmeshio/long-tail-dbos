@@ -1,0 +1,59 @@
+{
+  "name": "@hotmeshio/long-tail-dbos",
+  "version": "0.1.0",
+  "description": "Long Tail escalations for DBOS workflows: one call, conditional().",
+  "license": "SEE LICENSE IN LICENSE",
+  "main": "./build/index.js",
+  "types": "./build/index.d.ts",
+  "files": [
+    "build/",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node build/start.js",
+    "probe": "tsx scripts/probe.ts"
+  },
+  "peerDependencies": {
+    "@dbos-inc/dbos-sdk": "^5.5.0",
+    "@hotmeshio/long-tail": "^0.35.0"
+  },
+  "devDependencies": {
+    "@dbos-inc/dbos-sdk": "^5.5.0",
+    "@hotmeshio/long-tail": "file:../long-tail",
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.1",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  },
+  "exports": {
+    ".": {
+      "types": "./build/index.d.ts",
+      "default": "./build/index.js"
+    },
+    "./provider": {
+      "types": "./build/provider/index.d.ts",
+      "default": "./build/provider/index.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "provider": [
+        "./build/provider/index.d.ts"
+      ]
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hotmeshio/long-tail-dbos.git"
+  }
+}
