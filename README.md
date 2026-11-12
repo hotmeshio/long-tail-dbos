@@ -221,3 +221,7 @@ npm run probe               # re-records tests/fixtures/dbos-run.json from a rea
 - The integration tests use this repo's Postgres (`docker compose up -d postgres`, port 5425; set `PG_PORT` to point elsewhere). They create and drop only their own database, `lt_dbos_e2e`.
 - The end-to-end tests drive the compose stack the way a deployment runs: they start reviews through the app on port 4000 and work them through Long Tail on port 3400 as people and bots would. `LT_URL`, `APP_URL`, `LT_ADMIN_USER` and `LT_ADMIN_PASSWORD` point them elsewhere. Each run uses unique ids, so it can run repeatedly against one stack.
 - The image installs `@hotmeshio/long-tail` from npm. To try an unreleased build, run `./scripts/pack-long-tail.sh ../long-tail`; the image then installs `vendor/*.tgz` instead.
+
+### Releasing
+
+CI runs on every pull request and every push to `main`. To release, bump `version` in `package.json` and merge to `main`. The Release workflow runs CI again, publishes the version to npm with provenance, tags `v<version>` and creates a GitHub release. A version npm already has is skipped.

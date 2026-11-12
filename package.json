@@ -1,6 +1,6 @@
 {
   "name": "@hotmeshio/long-tail-dbos",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Long Tail escalations for DBOS workflows: one call, conditional().",
   "license": "SEE LICENSE IN LICENSE",
   "main": "./build/index.js",
@@ -10,6 +10,9 @@
     "LICENSE",
     "README.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
@@ -17,7 +20,8 @@
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node build/start.js",
-    "probe": "tsx scripts/probe.ts"
+    "probe": "tsx scripts/probe.ts",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "pg": "^8.23.1"
@@ -58,6 +62,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/hotmeshio/long-tail-dbos.git"
+    "url": "git+https://github.com/hotmeshio/long-tail-dbos.git"
   }
 }

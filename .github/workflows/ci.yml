@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+jobs:
+  test:
+    name: Typecheck, unit, integration, build
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PG_PORT: 5432
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:integration
+      - run: npm run build
+
+  e2e:
+    name: End to end on the compose stack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: docker compose up -d --build
+      - name: Wait for Long Tail and the example app
+        run: |
+          for i in $(seq 1 90); do
+            curl -sf http://localhost:3400/health >/dev/null && curl -s -o /dev/null http://localhost:4000/ && exit 0
+            sleep 2
+          done
+          exit 1
+      - run: npm run test:e2e
+      - name: Stack logs
+        if: failure()
+        run: docker compose logs --no-color --tail 300
+      - if: always()
+        run: docker compose down -v
