@@ -62,6 +62,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/hotmeshio/long-tail-dbos.git"
+    "url": "git+https://github.com/hotmeshio/long-tail-dbos.git"
   }
 }
