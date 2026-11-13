@@ -1,6 +1,6 @@
 {
   "name": "@hotmeshio/long-tail-dbos",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Long Tail escalations for DBOS workflows: one call, conditional().",
   "homepage": "https://hotmesh.io",
   "license": "SEE LICENSE IN LICENSE",

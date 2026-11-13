@@ -18,16 +18,16 @@ describe('e2e: outcomes other than a resolve', () => {
     await admin.request('POST', `/api/escalations/${row.id}/cancel`, {});
 
     const execution = await admin.closedExecution(workflowId);
-    expect(execution.result).toEqual({ orderId: expect.any(String), status: 'expired-or-cancelled' });
+    expect(execution.result).toEqual({ orderId: expect.any(String), status: 'cancelled' });
     expect((await admin.escalationsFor(workflowId))[0].status).toBe('cancelled');
   });
 
-  it('an escalation past its SLA expires and returns null to the workflow', async () => {
+  it('an escalation past its SLA expires and returns false to the workflow', async () => {
     const workflowId = await startReview(runId('expire'), '1s');
     await admin.pendingEscalation(workflowId);
 
     const execution = await admin.closedExecution(workflowId, SWEEP_MS + 20_000);
-    expect(execution.result).toMatchObject({ status: 'expired-or-cancelled' });
+    expect(execution.result).toMatchObject({ status: 'expired' });
     expect((await admin.escalationsFor(workflowId))[0].status).toBe('expired');
   });
 

@@ -26,7 +26,7 @@ async function reviewOrderFn(orderId: string) {
 export const reviewOrder = DBOS.registerWorkflow(reviewOrderFn, { name: 'reviewOrder' });
 ```
 
-A reviewer claims the review in the Long Tail dashboard, fills in the role's form and submits. The workflow resumes with their answer, or `null` when it expired or was cancelled.
+A reviewer claims the review in the Long Tail dashboard, fills in the role's form and submits. The workflow resumes with their answer: `false` when it expired, `null` when it was cancelled, the same as on HotMesh.
 
 ## What you get
 
@@ -38,7 +38,7 @@ A reviewer claims the review in the Long Tail dashboard, fills in the role's for
 - **API and MCP.** Anything a person does in the dashboard, a service or an agent does over HTTP or MCP, under the same permissions. `longTailTools()` calls Long Tail's MCP tools from a DBOS step.
 - **Invoke and schedules.** Register a DBOS workflow, and people, services and agents start it from the dashboard, HTTP or MCP, or Long Tail starts it on a cron schedule.
 
-Need more than the payload? `conditionalOutcome()` returns the whole outcome: `status`, `data`, `escalationId`, `resolvedBy` and `resolvedAt`. A wait can also prefill its form (`envelope`), attach `files` and `lookups`, pin a form `schemaVersion`, go straight to an `assignee`, link to a `parentId`, collect many items (`batch`, `accumulate`), and be addressed by a `signalKey`.
+`withResolution: true` adds who resolved it and when, and `conditionalOutcome()` returns the raw record. A wait can also prefill its form (`envelope`), attach `files` and `lookups`, pin a form `schemaVersion`, go straight to an `assignee`, link to a `parentId`, collect many items (`batch`, `accumulate`), and be addressed by a `signalKey`.
 
 ## Run it
 

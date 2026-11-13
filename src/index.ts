@@ -6,6 +6,6 @@ export { toMs } from './duration';
 export { STEP, WAIT_DEFAULTS } from './constants';
 export type {
   LTAccumulateConfig, LTAccumulatedItem, LTAccumulatorResult, LTBatchMarkers, LTCollectionConfig,
-  LTConditionalConfig, LTEnvelope, LTFileRef, LTFilledEntry, LTLookupRef, LTOutcome, LTResolution, LTWaitFields,
+  LTConditionalConfig, LTEnvelope, LTFileRef, LTFilledEntry, LTLookupRef, LTOutcome, LTResolution, LTWaitFields, LTWithResolution,
   LTWaitOutcome, LongTailConnection, OpenedWait,
 } from './types';
