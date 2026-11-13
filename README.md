@@ -1,18 +1,8 @@
 # Long Tail for DBOS
 
-## Human steps for DBOS workflows, on your own Postgres
+## DBOS solved reliability. Long Tail solves uncertainty.
 
-**One call, `conditional()`, gives a DBOS workflow a full human-in-the-loop desk: role queues, claims, forms, SLAs and a dashboard. It runs entirely on-prem: Postgres, your app and one Long Tail container. No cloud service, no extra server to operate.**
-
-DBOS is a library over Postgres. Long Tail is a container over Postgres. Together they run where your data already lives, with no connection to anything outside your network. A DBOS workflow that needs a person to approve, correct or decide something calls `conditional()`, parks, and gets the answer back as a typed value. Everything between those two moments (who sees the work, who claims it, which form they fill in, what happens when nobody answers in time) is Long Tail's job.
-
-### The problem
-
-Durable workflows are good at the parts machines do. The moment a step needs a person, every team builds the same things again: a table of pending tasks, a way to route them to the right people, a UI to work them, a timeout, an audit trail, and the plumbing to wake the workflow when someone answers. That code is rarely the product, and it is rarely done well.
-
-### The solution
-
-Take one small step sideways. Keep DBOS exactly as it is, and call `conditional()` where a person belongs:
+Sooner or later your DBOS workflow waits on something it can't control: a reviewer's approval, a correction, a decision only a person can make. Call `conditional()` there. The workflow parks, the work lands in the right role's queue, and the answer comes back as a typed value.
 
 ```ts
 import { DBOS } from '@dbos-inc/dbos-sdk';
@@ -38,7 +28,23 @@ async function reviewOrderFn(orderId: string) {
 export const reviewOrder = DBOS.registerWorkflow(reviewOrderFn, { name: 'reviewOrder' });
 ```
 
-The workflow parks in `DBOS.recv`. An escalation appears in the `reviewer` queue in the Long Tail dashboard. A reviewer claims it, fills in the role's form, and submits. Long Tail delivers one terminal outcome back to the workflow, which carries on.
+A reviewer opens the `reviewer` queue in the Long Tail dashboard, claims the review, fills in the role's form and submits. The workflow resumes with their answer.
+
+### Why build the wait yourself?
+
+Every wait needs the same plumbing: a queue, routing to the right people, claims so two people never work one item, a form, permissions, a deadline, an audit trail, and the code that wakes the workflow when someone answers. Teams rebuild it for every project, and it is never the product. One call covers all of it, and your DBOS code stays exactly as it is.
+
+- **Role queues.** Each escalation lands in a role (`reviewer`, `finance`, `support-tier-2`). Members see their queues; admins see everything.
+- **Forms and schema enforcement.** The role declares the form and the metadata schema. A resolution that fails it is refused before it reaches the workflow.
+- **Claims.** A person claims an item before working it; the claim is a lock with a time window.
+- **Deadlines.** `timeout: '48h'` becomes the escalation's expiry. Long Tail expires it and the workflow receives `null`.
+- **Facets and search.** `metadata` becomes queryable facets, so queues can be filtered, grouped and counted.
+- **A dashboard.** Queues, escalation detail, a list of DBOS workflows, and each workflow's timeline read from DBOS's own records.
+- **An API and MCP tools.** Anything a person does in the dashboard, a service or an AI agent can do over HTTP or MCP, under the same permissions.
+
+### Runs where your data lives
+
+DBOS is a library over Postgres. Long Tail is a container over Postgres. Your app, one Long Tail container and one Postgres database are the whole deployment, inside your own network.
 
 ### `conditional()` at a glance
 
@@ -46,8 +52,8 @@ The workflow parks in `DBOS.recv`. An escalation appears in the `reviewer` queue
 const answer = await conditional<T>(key, ask);
 ```
 
-- `key` names the wait within the workflow. Opening the same key again returns the same escalation, so a retried step never creates a second one.
-- `ask` describes the escalation: `role` (the queue), `type`, `description`, `priority` (1 to 4), `metadata` (searchable facets), `data` (shown to the resolver) and `timeout` (the SLA, such as `'48h'`).
+- `key` names the wait within the workflow. Opening the same key again returns the same escalation, so a retried step reuses it.
+- `ask` describes the escalation: `role` (the queue), `type`, `description`, `priority` (1 to 4), `metadata` (searchable facets), `data` (shown to the resolver) and `timeout` (the deadline, such as `'48h'`).
 - `answer` is the resolver's payload, typed as `T`, or `null` when the escalation expired or was cancelled.
 
 The same call works in HotMesh and Temporal workflows. Long Tail's documentation is at [hotmesh.io](https://hotmesh.io/docs/start/quickstart); [conditional()](https://hotmesh.io/docs/build/conditional) covers roles, forms and facets in depth.
