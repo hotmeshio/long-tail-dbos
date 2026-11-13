@@ -1,0 +1,229 @@
+{
+  "workers": [
+    {
+      "taskQueue": "orders",
+      "workflow": "reviewOrderRequest",
+      "config": {
+        "invocable": true,
+        "description": "Score an order, ask a reviewer, ship when approved",
+        "invocationRoles": [
+          "reviewer"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "orderId": {
+              "type": "string",
+              "title": "Order id"
+            }
+          },
+          "required": [
+            "orderId"
+          ]
+        }
+      }
+    },
+    {
+      "taskQueue": "orders",
+      "workflow": "inspectOrderRequest",
+      "config": {
+        "invocable": true,
+        "description": "Inspect both sides of an order in one escalation",
+        "invocationRoles": [
+          "reviewer"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "orderId": {
+              "type": "string",
+              "title": "Order id"
+            },
+            "timeout": {
+              "type": "string",
+              "title": "Deadline, such as 48h"
+            }
+          },
+          "required": [
+            "orderId"
+          ]
+        }
+      }
+    },
+    {
+      "taskQueue": "orders",
+      "workflow": "collectApprovalsRequest",
+      "config": {
+        "invocable": true,
+        "description": "Collect approvals for an order until enough arrive",
+        "invocationRoles": [
+          "reviewer"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "orderId": {
+              "type": "string",
+              "title": "Order id"
+            },
+            "approvals": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Approvals needed"
+            },
+            "timeout": {
+              "type": "string",
+              "title": "Deadline, such as 48h"
+            }
+          },
+          "required": [
+            "orderId"
+          ]
+        }
+      }
+    },
+    {
+      "taskQueue": "orders",
+      "workflow": "orderEscalationsRequest",
+      "config": {
+        "invocable": true,
+        "description": "List an order's escalations through Long Tail's MCP tools",
+        "invocationRoles": [
+          "reviewer"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "orderId": {
+              "type": "string",
+              "title": "Order id"
+            }
+          },
+          "required": [
+            "orderId"
+          ]
+        }
+      }
+    },
+    {
+      "taskQueue": "line",
+      "workflow": "machineUnitRoute",
+      "config": {
+        "invocable": true,
+        "description": "Move a set of units through the line, one handoff row per hop",
+        "invocationRoles": [
+          "line-operator"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "siteId": {
+              "type": "string"
+            },
+            "lineId": {
+              "type": "string"
+            },
+            "routeKey": {
+              "type": "string",
+              "title": "Route key, unique per set of units"
+            },
+            "orderRef": {
+              "type": "string"
+            },
+            "units": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "unitId": {
+                    "type": "string"
+                  },
+                  "carrierId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "unitId"
+                ]
+              }
+            },
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "handoffTimeout": {
+              "type": "string"
+            },
+            "operatorTimeout": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "siteId",
+            "lineId",
+            "routeKey",
+            "orderRef",
+            "units",
+            "steps"
+          ]
+        }
+      }
+    },
+    {
+      "taskQueue": "line",
+      "workflow": "machineCommand",
+      "config": {
+        "invocable": true,
+        "description": "Ask a machine to change over, start, stop, pause or resume",
+        "invocationRoles": [
+          "line-operator"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "siteId": {
+              "type": "string"
+            },
+            "lineId": {
+              "type": "string"
+            },
+            "machineId": {
+              "type": "string"
+            },
+            "role": {
+              "type": "string",
+              "title": "The machine's role"
+            },
+            "requestKey": {
+              "type": "string",
+              "title": "Request key, unique per command"
+            },
+            "op": {
+              "type": "string",
+              "title": "Command, such as changeover"
+            },
+            "args": {
+              "type": "object"
+            },
+            "timeout": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "siteId",
+            "lineId",
+            "machineId",
+            "role",
+            "requestKey",
+            "op"
+          ]
+        }
+      }
+    }
+  ]
+}

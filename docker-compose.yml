@@ -1,5 +1,5 @@
 # Fully local: Postgres, Long Tail (API + dashboard + relay) and a DBOS app. Nothing calls out.
-# docker compose up -d --build (scripts/pack-long-tail.sh tests an unreleased long-tail build)
+# docker compose up -d --build
 # Start a review: curl -X POST localhost:4000/orders/42, then resolve it at http://localhost:3400
 services:
   postgres:
@@ -27,17 +27,17 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-local-only}
       LT_ADMIN_USER: superadmin
       LT_ADMIN_PASSWORD: ${LT_ADMIN_PASSWORD:-l0ngt@1l}
-      LT_ROLES: reviewer
-      # Registers reviewOrderRequest, so the Invoke Tool and the invoke API can start it.
+      LT_ROLES: reviewer,line-bond,line-finish,line-exit,line-operator,line-quality
+      # Registers the example workflows, so the Invoke Tool and the invoke API can start them.
       LT_START_CONFIG: /config/long-tail.json
     volumes:
-      - ./examples/review-order/long-tail.json:/config/long-tail.json:ro
+      - ./examples/long-tail.json:/config/long-tail.json:ro
     ports:
       - "${LT_PORT:-3400}:3000"
     depends_on:
       postgres: { condition: service_healthy }
 
-  review-order:
+  examples:
     build: { context: ., target: example }
     environment:
       LT_URL: http://long-tail:3000
@@ -47,9 +47,9 @@ services:
       LT_ADMIN_PASSWORD: ${LT_ADMIN_PASSWORD:-l0ngt@1l}
       DBOS_SYSTEM_DATABASE_URL: postgresql://postgres:password@postgres:5432/longtail
       # Stable identity per replica: a restarted container recovers its own parked waits.
-      DBOS__VMID: review-order-1
+      DBOS__VMID: examples-1
       # Pinned version: a redeploy recovers waits parked by earlier code. Change code paths with DBOS.patch.
-      DBOS__APPVERSION: review-order-v1
+      DBOS__APPVERSION: examples-v1
     ports:
       - "${APP_PORT:-4000}:4000"
     depends_on:

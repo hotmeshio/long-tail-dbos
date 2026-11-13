@@ -1,6 +1,6 @@
 import { getLongTailConnection } from './config';
 import { LT_PATHS, WAIT_DEFAULTS } from './constants';
-import type { LTCollectionConfig } from './types';
+import type { LTCollectionConfig, LTWaitFields, LongTailConnection } from './types';
 
 /** A non-2xx response or transport failure from Long Tail. */
 export class LongTailRequestError extends Error {
@@ -16,7 +16,7 @@ export class LongTailRequestError extends Error {
   }
 }
 
-export interface OpenWaitBody extends LTCollectionConfig {
+export interface OpenWaitBody extends LTCollectionConfig, LTWaitFields {
   workflowId: string;
   runScope: string;
   workflowType?: string;
@@ -66,8 +66,21 @@ export async function postCancel(escalationId: string): Promise<void> {
   }
 }
 
-async function request<T>(method: string, path: string, body: unknown): Promise<T> {
-  const { url, apiKey, requestTimeoutMs } = getLongTailConnection();
+/** POST /api/mcp/servers/:server/tools/:tool/call. `server` is an MCP server's id or name. */
+export async function postToolCall<T>(
+  connection: LongTailConnection,
+  server: string,
+  tool: string,
+  args: Record<string, unknown>,
+  executeAs?: string,
+): Promise<T> {
+  const body = { arguments: args, ...(executeAs ? { execute_as: executeAs } : {}) };
+  const reply = await request<{ result: T }>('POST', LT_PATHS.TOOL_CALL(server, tool), body, connection);
+  return reply.result;
+}
+
+async function request<T>(method: string, path: string, body: unknown, connection = getLongTailConnection()): Promise<T> {
+  const { url, apiKey, requestTimeoutMs } = connection;
   const target = `${url}${path}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), requestTimeoutMs ?? WAIT_DEFAULTS.REQUEST_TIMEOUT_MS);

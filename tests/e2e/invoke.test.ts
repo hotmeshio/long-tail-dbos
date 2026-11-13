@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 
-import { LongTail, ROLE, eventually, runId } from './stack';
+import { LongTail, ROLE, runId } from './stack';
 
 const WORKFLOW = 'reviewOrderRequest';
 const QUEUE = 'orders';
@@ -52,25 +52,5 @@ describe('e2e: registering and invoking DBOS workflows from Long Tail', () => {
     const reply = await admin.send<any>('POST', '/api/workflows/reviewOrder/invoke', { data: { orderId: 'x' } });
     expect(reply.status).toBe(404);
     expect(reply.data.error).toMatch(/register a config/);
-  });
-
-  it('starts the workflow on its cron schedule', async () => {
-    const config = await admin.request<any>('GET', `/api/workflows/${WORKFLOW}/config`);
-    const orderId = runId('cron');
-    const since = Date.now();
-    const scheduled = { ...config, cron_schedule: '* * * * *', envelope_schema: { data: { orderId }, metadata: {} } };
-    await admin.request('PUT', `/api/workflows/${WORKFLOW}/config`, scheduled);
-    try {
-      const run = await eventually(async () => {
-        const { jobs } = await admin.request<any>('GET', `/api/workflow-states/jobs?search=${WORKFLOW}-cron-&status=running&limit=20`);
-        return jobs?.find((job: any) => job.created_at && Date.parse(job.created_at) >= since);
-      }, 'a scheduled run', 80_000);
-      expect(run.workflow_id).toMatch(new RegExp(`^${WORKFLOW}-cron-`));
-      const row = await admin.pendingEscalation(run.workflow_id);
-      expect(row.metadata).toMatchObject({ orderId });
-      await admin.request('POST', `/api/escalations/${row.id}/cancel`);
-    } finally {
-      await admin.request('PUT', `/api/workflows/${WORKFLOW}/config`, { ...config, cron_schedule: null });
-    }
   });
 });

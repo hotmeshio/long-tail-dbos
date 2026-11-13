@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 
-import { configureLongTail, getLongTailConnection, resetLongTailConnection } from '../../src/config';
+import { configureLongTail, getLongTailConnection, resetLongTailConnection, validConnection } from '../../src/config';
 
 describe('configureLongTail', () => {
   afterEach(() => resetLongTailConnection());
@@ -21,5 +21,11 @@ describe('configureLongTail', () => {
 
   it('rejects an invalid url', () => {
     expect(() => configureLongTail({ url: 'not a url', apiKey: 'k' })).toThrow(/not a valid URL/);
+  });
+
+  it('validates a connection for any caller, keeping the timeout', () => {
+    expect(validConnection({ url: 'https://lt.example.com//', apiKey: 'k', requestTimeoutMs: 5 }, 'longTailTools'))
+      .toEqual({ url: 'https://lt.example.com', apiKey: 'k', requestTimeoutMs: 5 });
+    expect(() => validConnection({ url: 'nope', apiKey: 'k' }, 'longTailTools')).toThrow(/^longTailTools: url "nope"/);
   });
 });

@@ -2,6 +2,8 @@
 export const STEP = {
   OPEN: 'lt.open',
   CLOSE: 'lt.close',
+  /** Prefix of a tool call's step name: `lt.tool:<server>/<tool>`. */
+  TOOL: 'lt.tool',
 } as const;
 
 /** Reserved DBOS operation names (they appear in listWorkflowSteps). */
@@ -41,6 +43,7 @@ export const LT_PATHS = {
   OPEN_WAIT: '/api/escalations/waits',
   CANCEL: (escalationId: string) => `/api/escalations/${encodeURIComponent(escalationId)}/cancel`,
   ESCALATION: (escalationId: string) => `/api/escalations/${encodeURIComponent(escalationId)}`,
+  TOOL_CALL: (server: string, tool: string) => `/api/mcp/servers/${encodeURIComponent(server)}/tools/${encodeURIComponent(tool)}/call`,
 } as const;
 
 export const STEP_PAGE_SIZE = 500;

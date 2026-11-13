@@ -1,6 +1,6 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 
-import { conditional, type LTAccumulatorResult, type LTBatchMarkers, type LTEnvelope } from '../../src';
+import { conditional, longTailTools, type LTAccumulatorResult, type LTBatchMarkers, type LTEnvelope } from '../../src';
 
 export interface ReviewDecision {
   approved: boolean;
@@ -81,3 +81,17 @@ async function collectApprovalsRequestFn(envelope: LTEnvelope<{ orderId: string;
 }
 
 export const collectApprovalsRequest = DBOS.registerWorkflow(collectApprovalsRequestFn, { name: 'collectApprovalsRequest' });
+
+interface FoundEscalations {
+  escalations: Array<{ id: string; status: string; type: string; workflow_id: string }>;
+}
+
+/** Invoked from Long Tail: reads an order's escalations through Long Tail's MCP tools, from a DBOS step. */
+async function orderEscalationsRequestFn(envelope: LTEnvelope<{ orderId: string }>) {
+  const { orderId } = envelope.data;
+  const found = await longTailTools().call<FoundEscalations>('long-tail-admin', 'find_escalations', { facets: { orderId } });
+  const escalations = found.escalations.map(({ id, status, type, workflow_id }) => ({ id, status, type, workflowId: workflow_id }));
+  return { data: { orderId, escalations } };
+}
+
+export const orderEscalationsRequest = DBOS.registerWorkflow(orderEscalationsRequestFn, { name: 'orderEscalationsRequest' });

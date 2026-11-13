@@ -1,12 +1,14 @@
 import { createServer } from 'http';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 
-import { configureLongTail } from '../../src';
+import { configureLongTail } from '../src';
 import { bootstrapApiKey } from './bootstrap';
-import { ORDERS_QUEUE, reviewOrder } from './workflow';
+import { LINE_QUEUE } from './machine-line';
+import { ORDERS_QUEUE, reviewOrder } from './review-order/workflow';
 
-// A DBOS app process. POST /orders/:id starts a review; the wait shows up in Long Tail.
-// ?sla=30m sets the review deadline (default 48h).
+// The example DBOS app process: the review-order and machine-line workflows.
+// POST /orders/:id starts a review; the wait shows up in Long Tail. ?sla=30m sets the deadline (default 48h).
+// Long Tail starts the invocable workflows on the orders and line queues (examples/long-tail.json).
 // DBOS__VMID and DBOS__APPVERSION are fixed per replica so a restart recovers its parked waits.
 async function main(): Promise<void> {
   const url = process.env.LT_URL ?? 'http://localhost:3400';
@@ -14,6 +16,7 @@ async function main(): Promise<void> {
   DBOS.setConfig({ name: 'review-order', systemDatabaseUrl: process.env.DBOS_SYSTEM_DATABASE_URL });
   await DBOS.launch();
   await DBOS.registerQueue(ORDERS_QUEUE);
+  await DBOS.registerQueue(LINE_QUEUE);
 
   const port = Number(process.env.PORT ?? 4000);
   createServer(async (req, res) => {
@@ -32,7 +35,7 @@ async function main(): Promise<void> {
       (err: Error) => console.log(`[review-order] ${workflowId} ended: ${err.message}`),
     );
     res.writeHead(202, { 'content-type': 'application/json' }).end(JSON.stringify({ workflowId }));
-  }).listen(port, () => console.log(`[review-order] executor ${DBOS.executorID}, version ${DBOS.applicationVersion}, listening on ${port}`));
+  }).listen(port, () => console.log(`[examples] executor ${DBOS.executorID}, version ${DBOS.applicationVersion}, listening on ${port}`));
 }
 
 main().catch((err) => {
