@@ -97,6 +97,9 @@ export interface LTResolution {
   resolvedAt: string | null;
 }
 
+/** A resolved payload with its resolution provenance. */
+export type LTWithResolution<T> = T & { $resolution: LTResolution };
+
 /** Output of the lt.open step; stored in the checkpoint. */
 export interface OpenedWait {
   escalationId: string;

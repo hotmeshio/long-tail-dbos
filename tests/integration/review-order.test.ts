@@ -60,10 +60,10 @@ describe('Long Tail on DBOS: review order', () => {
     await expect(handle.getResult()).resolves.toMatchObject({ status: 'rejected' });
   });
 
-  it('returns null when the escalation expires', async () => {
+  it('returns false when the escalation expires', async () => {
     const id = `review-expire-${Date.now()}`;
     const handle = await DBOS.startWorkflow(reviewOrder, { workflowID: id })('order-3', '1s');
-    await expect(handle.getResult()).resolves.toEqual({ orderId: 'order-3', status: 'expired-or-cancelled' });
+    await expect(handle.getResult()).resolves.toEqual({ orderId: 'order-3', status: 'expired' });
     expect((await rowsFor(id))[0].status).toBe('expired');
   });
 
@@ -72,7 +72,7 @@ describe('Long Tail on DBOS: review order', () => {
     const handle = await DBOS.startWorkflow(reviewOrder, { workflowID: id })('order-4');
     const row = await pendingRow(id);
     await api('POST', `/api/escalations/${row.id}/cancel`, lt.adminToken, {});
-    await expect(handle.getResult()).resolves.toMatchObject({ status: 'expired-or-cancelled' });
+    await expect(handle.getResult()).resolves.toMatchObject({ status: 'cancelled' });
   });
 
   it('delivers an outcome resolved while the DBOS process is down', async () => {

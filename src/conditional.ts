@@ -3,7 +3,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import { CLOSE_REASON_DEADLINE, ESCALATION_STATUS, WAIT_DEFAULTS } from './constants';
 import { toMs } from './duration';
 import { ltClose, ltOpen } from './steps';
-import type { LTConditionalConfig, LTOutcome, LTResolution, LTWaitOutcome, OpenedWait } from './types';
+import type { LTConditionalConfig, LTOutcome, LTResolution, LTWaitOutcome, LTWithResolution, OpenedWait } from './types';
 
 const PRIORITIES = [1, 2, 3, 4];
 
@@ -11,22 +11,36 @@ const PRIORITIES = [1, 2, 3, 4];
  * Wait for a person (or machine) through Long Tail.
  *
  * Opens an escalation in `config.role`, parks the workflow in DBOS.recv, and
- * returns the resolver payload. Returns null when the escalation expires or
- * is cancelled. A `batch` or `accumulate` wait returns its collection, also
- * on an expiry that kept one (an accumulator, or `partialOnTimeout`).
- * `withResolution: true` adds `$resolution` to a resolved payload.
- * `key` is unique per wait within one workflow.
+ * returns what HotMesh's `conditional()` returns: the resolver payload when
+ * resolved, `false` when it expires, `null` when it is cancelled. A `batch`
+ * or `accumulate` wait returns its collection, also on an expiry that kept
+ * one (an accumulator, or `partialOnTimeout`), so an accumulator never
+ * returns `false`. `withResolution: true` adds `$resolution` to a resolved
+ * payload. `key` is unique per wait within one workflow.
  */
-export async function conditional<T = Record<string, unknown>>(key: string, config: LTConditionalConfig): Promise<T | null> {
+export async function conditional<T = Record<string, unknown>>(
+  key: string,
+  config: LTConditionalConfig & { accumulate: object; withResolution?: false },
+): Promise<T | null>;
+export async function conditional<T = Record<string, unknown>>(
+  key: string,
+  config: LTConditionalConfig & { withResolution: true },
+): Promise<LTWithResolution<T> | false | null>;
+export async function conditional<T = Record<string, unknown>>(key: string, config: LTConditionalConfig): Promise<T | false | null>;
+export async function conditional<T = Record<string, unknown>>(
+  key: string,
+  config: LTConditionalConfig,
+): Promise<T | LTWithResolution<T> | false | null> {
   const outcome = await conditionalOutcome<T>(key, config);
-  if (outcome.status === ESCALATION_STATUS.CANCELLED || outcome.data === null) return null;
-  if (outcome.status !== ESCALATION_STATUS.RESOLVED || !config.withResolution) return outcome.data;
+  if (outcome.status === ESCALATION_STATUS.EXPIRED) return outcome.data ?? false;
+  if (outcome.status !== ESCALATION_STATUS.RESOLVED) return null;
+  if (!config.withResolution) return outcome.data as T;
   const $resolution: LTResolution = { escalationId: outcome.escalationId, resolvedBy: outcome.resolvedBy, resolvedAt: outcome.resolvedAt };
-  return { ...(outcome.data as Record<string, unknown>), $resolution } as T;
+  return { ...(outcome.data as T), $resolution };
 }
 
 /**
- * Wait as `conditional()` does, and return the whole outcome: how the wait
+ * Wait as `conditional()` does, and return the raw record: how the wait
  * ended, its data, the escalation id, and who closed it when.
  */
 export async function conditionalOutcome<T = Record<string, unknown>>(key: string, config: LTConditionalConfig): Promise<LTOutcome<T>> {

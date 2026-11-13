@@ -32,7 +32,7 @@ async function machineCommandFn(envelope: LTEnvelope<MachineCommandInput>): Prom
     timeout: input.timeout ?? '10m',
     signalKey: key,
   });
-  const data: CommandResolution = reply ?? {
+  const data: CommandResolution = reply || {
     accepted: false, machineId: input.machineId, op: input.op, status: COMMAND_STATUS.NO_REPLY, reason: 'the row did not resolve before the timeout',
   };
   return { data };

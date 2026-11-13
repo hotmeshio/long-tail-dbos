@@ -9,7 +9,7 @@ export interface ReviewDecision {
 
 export interface ReviewResult {
   orderId: string;
-  status: 'shipped' | 'rejected' | 'expired-or-cancelled';
+  status: 'shipped' | 'rejected' | 'expired' | 'cancelled';
   decision?: ReviewDecision;
 }
 
@@ -29,7 +29,8 @@ async function reviewOrderFn(orderId: string, sla = '48h'): Promise<ReviewResult
     timeout: sla,
   });
 
-  if (!decision) return { orderId, status: 'expired-or-cancelled' };
+  if (decision === false) return { orderId, status: 'expired' };
+  if (decision === null) return { orderId, status: 'cancelled' };
   if (decision.approved) await DBOS.runStep(async () => ({ shipped: orderId }), { name: 'ship' });
   return { orderId, status: decision.approved ? 'shipped' : 'rejected', decision };
 }

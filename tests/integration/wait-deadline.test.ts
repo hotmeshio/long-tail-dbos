@@ -83,6 +83,15 @@ describe('settling a wait at the recv deadline', () => {
     await expect(DBOS.retrieveWorkflow(key).getResult()).resolves.toEqual(kept);
   });
 
+  it('returns false for a plain wait that expired undelivered', async () => {
+    const key = `deadline-expired-plain-${Date.now()}`;
+    const { escalationId } = await startWait(key);
+    await db.query('UPDATE lt_durable_waits SET delivered_at = NOW(), delivery = $2 WHERE escalation_id = $1', [escalationId, 'held-by-test']);
+    await db.query(`UPDATE public.hmsh_escalations SET status = 'expired', resolved_at = NOW(), updated_at = NOW() WHERE id = $1`, [escalationId]);
+
+    await expect(DBOS.retrieveWorkflow(key).getResult()).resolves.toBe(false);
+  });
+
   it('cancels a row still pending at the deadline and returns null', async () => {
     const key = `deadline-pending-${Date.now()}`;
     const { escalationId } = await startWait(key);

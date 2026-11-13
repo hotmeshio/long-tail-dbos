@@ -38,7 +38,7 @@ describe('e2e: resolve surfaces deliver to DBOS', () => {
     await admin.request('POST', '/api/escalations/bulk-cancel', { ids: rows.map((r) => r.id) });
 
     for (const workflowId of workflowIds) {
-      expect((await admin.closedExecution(workflowId)).result).toMatchObject({ status: 'expired-or-cancelled' });
+      expect((await admin.closedExecution(workflowId)).result).toMatchObject({ status: 'cancelled' });
     }
   });
 });

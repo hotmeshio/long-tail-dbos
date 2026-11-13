@@ -20,7 +20,7 @@ async function auditedReviewFn(orderId: string): Promise<{ orderId: string; appr
     type: 'order-review',
     metadata: { orderId },
   });
-  return { orderId, approved: Boolean(decision?.approved), audited };
+  return { orderId, approved: Boolean(decision && decision.approved), audited };
 }
 
 export const auditedReview = DBOS.registerWorkflow(auditedReviewFn, { name: 'auditedReview' });

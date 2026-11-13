@@ -34,9 +34,9 @@ describe('conditional', () => {
     expect(dbos.recv).toHaveBeenCalledWith('review', { timeoutSeconds: 3600 + WAIT_DEFAULTS.GRACE_SECONDS });
   });
 
-  it('returns null for expired and cancelled outcomes', async () => {
+  it('returns false when the wait expires and null when it is cancelled', async () => {
     dbos.recv.mockResolvedValueOnce({ waitKey: 'review', escalationId: 'e-1', status: 'expired' });
-    await expect(conditional('review', CONFIG)).resolves.toBeNull();
+    await expect(conditional('review', CONFIG)).resolves.toBe(false);
     dbos.recv.mockResolvedValueOnce({ waitKey: 'review', escalationId: 'e-1', status: 'cancelled' });
     await expect(conditional('review', CONFIG)).resolves.toBeNull();
     expect(ltClose).not.toHaveBeenCalled();
