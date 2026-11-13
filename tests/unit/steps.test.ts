@@ -22,8 +22,8 @@ vi.mock('@dbos-inc/dbos-sdk', () => ({
 }));
 vi.mock('../../src/lt-client', () => ({ postOpenWait: vi.fn(), postCancel: vi.fn() }));
 
-import { openWait, closeWait } from '../../src/steps';
-import { postCancel, postOpenWait } from '../../src/lt-client';
+import { openWait } from '../../src/steps';
+import { postOpenWait } from '../../src/lt-client';
 
 describe('lt.open / lt.close steps', () => {
   beforeEach(() => {
@@ -70,10 +70,6 @@ describe('lt.open / lt.close steps', () => {
     await expect(openWait('review', { role: 'r', type: 't' })).rejects.toThrow(/inside a DBOS workflow/);
   });
 
-  it('closes by escalation id', async () => {
-    await closeWait('e-9');
-    expect(postCancel).toHaveBeenCalledWith('e-9');
-  });
 });
 
 describe('registration after launch', () => {

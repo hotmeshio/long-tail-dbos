@@ -40,6 +40,7 @@ export const WAIT_DEFAULTS = {
 export const LT_PATHS = {
   OPEN_WAIT: '/api/escalations/waits',
   CANCEL: (escalationId: string) => `/api/escalations/${encodeURIComponent(escalationId)}/cancel`,
+  ESCALATION: (escalationId: string) => `/api/escalations/${encodeURIComponent(escalationId)}`,
 } as const;
 
 export const STEP_PAGE_SIZE = 500;
@@ -49,3 +50,10 @@ export const COUNT_POOL_SIZE = 2;
 
 /** Reason sent when the recv deadline passes before Long Tail delivered an outcome. */
 export const CLOSE_REASON_DEADLINE = 'wait-deadline';
+
+export const ESCALATION_STATUS = {
+  PENDING: 'pending',
+  RESOLVED: 'resolved',
+  EXPIRED: 'expired',
+  CANCELLED: 'cancelled',
+} as const;

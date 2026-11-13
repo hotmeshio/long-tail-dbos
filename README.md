@@ -251,7 +251,10 @@ Long Tail opens a wait once per `(workflowId, key)`, so a retried `lt.open` step
 - `timeout` (for example `'48h'`) becomes the escalation's expiry. Long Tail expires the row on time and delivers `expired`; `conditional()` returns `null`.
 - DBOS gives `recv` a default timeout of 60 seconds, so `conditional()` always sets its own: the SLA plus ten minutes of grace, so Long Tail's expiry arrives first.
 - With no SLA, the backstop is `maxWaitSeconds` (default 365 days).
-- If the backstop passes before any outcome, the `lt.close` step cancels the escalation and `conditional()` returns `null`.
+- If the deadline passes before any outcome arrives, the `lt.close` step settles from the escalation row itself:
+  - a row Long Tail already resolved or expired returns that outcome, even when its delivery never ran;
+  - a row still pending is cancelled and `conditional()` returns `null`, unless a resolve wins that race, in which case the resolve is returned;
+  - while Long Tail is unreachable the step retries, so the workflow never mistakes an outage for a cancellation.
 
 ### What does the dashboard show for a DBOS workflow?
 

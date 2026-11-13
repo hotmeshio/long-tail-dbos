@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { configureLongTail, resetLongTailConnection } from '../../src/config';
-import { LongTailRequestError, postCancel, postOpenWait } from '../../src/lt-client';
+import { LongTailRequestError, getEscalation, postCancel, postOpenWait } from '../../src/lt-client';
 
 const BODY = { workflowId: 'wf-1', runScope: '', waitKey: 'review', role: 'reviewer', type: 'order-review' };
 
@@ -76,4 +76,16 @@ describe('Long Tail client', () => {
     fetchMock.mockResolvedValueOnce(respond(404, { error: 'not found' }));
     await expect(postCancel('e-1')).rejects.toBeInstanceOf(LongTailRequestError);
   });
+
+  it('reads an escalation by id with a GET and no body', async () => {
+    fetchMock.mockResolvedValueOnce(respond(200, { status: 'resolved', resolver_payload: '{"ok":true}' }));
+    await expect(getEscalation('e-1')).resolves.toMatchObject({ status: 'resolved' });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://lt.example.com/api/escalations/e-1');
+    expect(init).toMatchObject({ method: 'GET' });
+    expect(init.body).toBeUndefined();
+    fetchMock.mockResolvedValueOnce(respond(404, { error: 'not found' }));
+    await expect(getEscalation('e-1')).rejects.toBeInstanceOf(LongTailRequestError);
+  });
 });
+
