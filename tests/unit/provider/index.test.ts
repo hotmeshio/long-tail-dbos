@@ -12,6 +12,7 @@ describe('DBOS provider', () => {
     getWorkflow: vi.fn(),
     listWorkflowSteps: vi.fn(),
     send: vi.fn(),
+    enqueue: vi.fn(),
     cancelWorkflow: vi.fn(),
     destroy: vi.fn(),
   };
@@ -22,10 +23,19 @@ describe('DBOS provider', () => {
     client.getWorkflow.mockResolvedValue({ workflowID: 'wf-1', status: 'PENDING', workflowName: 'reviewOrder', createdAt: 0 });
   });
 
-  it('is a non-native provider with execution and terminate, and no list without a counter', () => {
+  it('is a non-native provider that starts, exports and terminates, and does not list without a counter', () => {
     expect(provider.name).toBe('dbos');
-    expect(provider.capabilities).toEqual({ native: false, execution: true, terminate: true, list: false });
+    expect(provider.capabilities).toEqual({ native: false, execution: true, terminate: true, list: false, start: true });
     expect(provider.list).toBeUndefined();
+  });
+
+  it('starts a workflow by enqueueing it on the config queue with the envelope', async () => {
+    const envelope = { data: { orderId: '42' }, metadata: {}, lt: { userId: 'u-1' } };
+    await provider.start!({ workflowType: 'reviewOrderRequest', workflowId: 'review-42', taskQueue: 'orders', args: [envelope] });
+    expect(client.enqueue).toHaveBeenCalledWith(
+      { queueName: 'orders', workflowName: 'reviewOrderRequest', workflowID: 'review-42' },
+      envelope,
+    );
   });
 
   it('delivers to a waiting workflow on the wait key, keyed by escalation id', async () => {

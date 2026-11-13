@@ -40,3 +40,18 @@ export interface OpenedWait {
   expiresAt: string | null;
   workflowType: string | null;
 }
+
+/**
+ * The one argument Long Tail passes a workflow it invokes or schedules: the
+ * form's `data`, the caller's `metadata`, and who started it in `lt`.
+ */
+export interface LTEnvelope<D = Record<string, unknown>> {
+  data: D;
+  metadata: Record<string, unknown>;
+  lt: {
+    userId?: string;
+    principal?: { id: string; type?: string; displayName?: string; roles?: unknown[] };
+    scopes?: string[];
+    initiatedBy?: string;
+  };
+}

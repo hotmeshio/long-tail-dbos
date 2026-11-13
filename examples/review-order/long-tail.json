@@ -1,0 +1,18 @@
+{
+  "workers": [
+    {
+      "taskQueue": "orders",
+      "workflow": "reviewOrderRequest",
+      "config": {
+        "invocable": true,
+        "description": "Score an order, ask a reviewer, ship when approved",
+        "invocationRoles": ["reviewer"],
+        "inputSchema": {
+          "type": "object",
+          "properties": { "orderId": { "type": "string", "title": "Order id" } },
+          "required": ["orderId"]
+        }
+      }
+    }
+  ]
+}

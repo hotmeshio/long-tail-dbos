@@ -3,4 +3,4 @@ export { configureLongTail } from './config';
 export { LongTailRequestError } from './lt-client';
 export { toMs } from './duration';
 export { STEP, WAIT_DEFAULTS } from './constants';
-export type { LTConditionalConfig, LTWaitOutcome, LongTailConnection, OpenedWait } from './types';
+export type { LTConditionalConfig, LTEnvelope, LTWaitOutcome, LongTailConnection, OpenedWait } from './types';

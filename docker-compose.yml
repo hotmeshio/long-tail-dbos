@@ -28,6 +28,10 @@ services:
       LT_ADMIN_USER: superadmin
       LT_ADMIN_PASSWORD: ${LT_ADMIN_PASSWORD:-l0ngt@1l}
       LT_ROLES: reviewer
+      # Registers reviewOrderRequest, so the Invoke Tool and the invoke API can start it.
+      LT_START_CONFIG: /config/long-tail.json
+    volumes:
+      - ./examples/review-order/long-tail.json:/config/long-tail.json:ro
     ports:
       - "${LT_PORT:-3400}:3000"
     depends_on:

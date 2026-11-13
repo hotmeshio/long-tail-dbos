@@ -41,6 +41,7 @@ Every wait needs the same plumbing: a queue, routing to the right people, claims
 - **Facets and search.** `metadata` becomes queryable facets, so queues can be filtered, grouped and counted.
 - **A dashboard.** Queues, escalation detail, a list of DBOS workflows, and each workflow's timeline read from DBOS's own records.
 - **An API and MCP tools.** Anything a person does in the dashboard, a service or an AI agent can do over HTTP or MCP, under the same permissions.
+- **Invoke and schedules.** Register a DBOS workflow and people, services and agents start it from the dashboard's Invoke Tool, HTTP or MCP, or Long Tail starts it on a schedule.
 
 ### Runs where your data lives
 
@@ -76,6 +77,17 @@ curl -X POST localhost:4000/orders/43
 docker compose restart review-order      # the app goes away mid-wait
 # resolve order 43 in the dashboard; the restarted app recovers the workflow and it completes
 ```
+
+Start one from Long Tail instead: open **Invoke Tool**, choose `reviewOrderRequest`, enter an order id and submit. Or over HTTP:
+
+```bash
+TOKEN=$(curl -s -X POST localhost:3400/api/auth/login -H 'content-type: application/json' \
+  -d '{"username":"superadmin","password":"l0ngt@1l"}' | node -pe 'JSON.parse(require("fs").readFileSync(0)).token')
+curl -X POST localhost:3400/api/workflows/reviewOrderRequest/invoke -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' -d '{"data":{"orderId":"44"}}'
+```
+
+The review lands in the same **reviewer** queue. Resolve it, and the Invoke Tool shows the result.
 
 Everything in `docker-compose.yml` is local: one Postgres database, `longtail`, holding Long Tail's tables and DBOS's system tables (in the `dbos` schema), the Long Tail container (API, dashboard and delivery relay) and the example app. Nothing calls out to the internet.
 
@@ -114,7 +126,7 @@ Run Long Tail with the provider, either from this repo's image (`node build/star
 | `PORT`, `JWT_SECRET` | Long Tail's HTTP port and token secret. |
 | `LT_ADMIN_USER`, `LT_ADMIN_PASSWORD`, `LT_ADMIN_EMAIL` | The seeded admin. |
 | `LT_ROLES` | Comma-separated roles to create, such as `reviewer,finance`. |
-| `LT_START_CONFIG` | Optional JSON file with further `start()` settings, such as role titles or SSO. |
+| `LT_START_CONFIG` | Optional JSON file with further `start()` settings, such as role titles, SSO, or `workers` that register workflows for invoke. |
 
 In your own code:
 
@@ -127,6 +139,46 @@ await start({
   durable: { provider: await dbosProvider({ systemDatabaseUrl: process.env.DBOS_SYSTEM_DATABASE_URL! }) },
 });
 ```
+
+### Start workflows from Long Tail
+
+Register a workflow, and people, services and agents can start it from the Invoke Tool, `POST /api/workflows/:type/invoke` or the `invoke_workflow` MCP tool. A config with a `cronSchedule` runs it on that schedule. Long Tail passes every workflow it starts one argument, the envelope:
+
+```ts
+import { DBOS } from '@dbos-inc/dbos-sdk';
+import type { LTEnvelope } from '@hotmeshio/long-tail-dbos';
+
+async function reviewOrderRequestFn(envelope: LTEnvelope<{ orderId: string }>) {
+  return { data: await reviewOrderFn(envelope.data.orderId) };
+}
+
+export const reviewOrderRequest = DBOS.registerWorkflow(reviewOrderRequestFn, { name: 'reviewOrderRequest' });
+
+await DBOS.launch();
+await DBOS.registerQueue('orders');      // Long Tail enqueues invoked workflows here
+```
+
+- `envelope.data` is the invoke input, checked against the config's `inputSchema` before anything starts.
+- `envelope.metadata` carries the caller's metadata; `envelope.lt` says who started the run.
+- Returning `{ data }` shows that payload in the Invoke Tool when the run completes.
+
+Register the workflow in code, through `workers` in `start()` or `LT_START_CONFIG`; `taskQueue` is the DBOS queue name:
+
+```json
+{
+  "workers": [{
+    "taskQueue": "orders",
+    "workflow": "reviewOrderRequest",
+    "config": {
+      "invocable": true,
+      "invocationRoles": ["reviewer"],
+      "inputSchema": { "type": "object", "properties": { "orderId": { "type": "string" } }, "required": ["orderId"] }
+    }
+  }]
+}
+```
+
+The dashboard's Registry page, `PUT /api/workflows/:type/config` and the `upsert_workflow_config` MCP tool register workflows too. The invoke checks match HotMesh's: `invocable`, invocation roles, bot key scopes, the input schema and `execute_as`.
 
 ## FAQ
 
@@ -205,13 +257,13 @@ Source available: Apache 2.0 with the Commons Clause.
 
 See [LICENSE](LICENSE); its summary is a convenience and the license text governs.
 
-### What is out of scope today?
+### Which Long Tail features need HotMesh?
 
-- Batch and accumulate escalations, where one row collects many items.
-- Starting DBOS workflows from Long Tail.
-- DBOS schedules.
-- Running HotMesh and DBOS workflows in one deployment.
-- DBOS suspend mode.
+- Batch and accumulate escalations, where one row collects many items. The item fold runs inside HotMesh's wait today.
+- HotMesh workflows running beside DBOS workflows in one Long Tail deployment.
+- YAML pipelines, triage and the AI query surfaces.
+
+DBOS offers suspend mode, which releases a parked workflow's memory, in DBOS Enterprise. This package parks waits in `recv`, as described under memory per parked wait.
 
 ## Development
 
