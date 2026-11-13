@@ -59,6 +59,12 @@ describe('startLongTailDbos', () => {
     expect(config.roles).toEqual([{ role: 'approver' }]);
   });
 
+  it('passes workers from LT_START_CONFIG through, to register workflows for invoke', async () => {
+    const workers = [{ taskQueue: 'orders', workflow: 'reviewOrderRequest', config: { invocable: true } }];
+    await startLongTailDbos({ DBOS_SYSTEM_DATABASE_URL: SYS, LT_START_CONFIG: writeConfig({ workers }) });
+    expect(start.mock.calls[0][0].workers).toEqual(workers);
+  });
+
   it('rejects LT_START_CONFIG keys the environment owns', async () => {
     const path = writeConfig({ durable: {} });
     await expect(startLongTailDbos({ DBOS_SYSTEM_DATABASE_URL: SYS, LT_START_CONFIG: path })).rejects.toThrow(/durable/);

@@ -41,6 +41,7 @@ Every wait needs the same plumbing: a queue, routing to the right people, claims
 - **Facets and search.** `metadata` becomes queryable facets, so queues can be filtered, grouped and counted.
 - **A dashboard.** Queues, escalation detail, a list of DBOS workflows, and each workflow's timeline read from DBOS's own records.
 - **An API and MCP tools.** Anything a person does in the dashboard, a service or an AI agent can do over HTTP or MCP, under the same permissions.
+- **Invoke and schedules.** Register a DBOS workflow and people, services and agents start it from the dashboard's Invoke Tool, HTTP or MCP, or Long Tail starts it on a schedule.
 
 ### Runs where your data lives
 
@@ -57,6 +58,46 @@ const answer = await conditional<T>(key, ask);
 - `answer` is the resolver's payload, typed as `T`, or `null` when the escalation expired or was cancelled.
 
 The same call works in HotMesh and Temporal workflows. Long Tail's documentation is at [hotmesh.io](https://hotmesh.io/docs/start/quickstart); [conditional()](https://hotmesh.io/docs/build/conditional) covers roles, forms and facets in depth.
+
+### Collect many items in one escalation
+
+One wait can gather many answers: both sides of an inspection, every box in a delivery, approvals from several people. Declare it in `conditional()` with the same fields HotMesh workflows use. `LTAccumulatorResult` and `LTBatchMarkers` come from `@hotmeshio/long-tail-dbos`.
+
+```ts
+// One fill per declared key; the last fill returns every item, keyed by item.
+const sides = await conditional<Record<'left' | 'right', { passed: boolean }>>(`inspect-${orderId}`, {
+  role: 'reviewer',
+  type: 'order-inspection',
+  metadata: { orderId },
+  batch: ['left', 'right'],
+  partialOnTimeout: true,          // on expiry, return the sides inspected so far
+  timeout: '4h',
+});
+
+// Any item keys until `max` arrive, the deadline passes, or a person closes it.
+const approvals = await conditional<LTAccumulatorResult<{ approver: string }>>(`approvals-${orderId}`, {
+  role: 'reviewer',
+  type: 'order-approvals',
+  metadata: { orderId },
+  accumulate: { max: 2 },
+  timeout: '24h',
+});
+approvals?.$accumulated.map((item) => item.payload?.approver);   // in arrival order
+approvals?.$trigger;                                               // 'count', 'timeout' or 'resolve'
+```
+
+People, services and agents fill items through `POST /api/escalations/:id/resolve-batch-item` and `POST /api/escalations/:id/accumulate`, the matching MCP tools, scan rules or the dashboard. Each batch item is validated against the role's form.
+
+| Declaration | Returns |
+|---|---|
+| `batch` | Every item when the last key is filled |
+| `batch` + `wakeOnFill` | The items so far when a listed key is filled, with `$filled` and `$trigger: 'fill'` |
+| `batch` + `wakeOnFlag` | The items so far when someone flags an item, with `$flags` and `$trigger: 'flag'` |
+| `batch` + `partialOnTimeout` | On expiry, the items so far with `$trigger: 'timeout'` |
+| `batch` + `filled` | Starts with those items already satisfied |
+| `accumulate` | `$accumulated` and `$trigger`: `count` at `max`, `timeout` on expiry, `resolve` (with the resolver's payload) when a person closes it |
+
+Cancellation returns `null`, as for any wait. A batch without `partialOnTimeout` returns `null` on expiry.
 
 ## Getting started in five minutes
 
@@ -76,6 +117,17 @@ curl -X POST localhost:4000/orders/43
 docker compose restart review-order      # the app goes away mid-wait
 # resolve order 43 in the dashboard; the restarted app recovers the workflow and it completes
 ```
+
+Start one from Long Tail instead: open **Invoke Tool**, choose `reviewOrderRequest`, enter an order id and submit. `inspectOrderRequest` and `collectApprovalsRequest` show batch and accumulate waits the same way. Or over HTTP:
+
+```bash
+TOKEN=$(curl -s -X POST localhost:3400/api/auth/login -H 'content-type: application/json' \
+  -d '{"username":"superadmin","password":"l0ngt@1l"}' | node -pe 'JSON.parse(require("fs").readFileSync(0)).token')
+curl -X POST localhost:3400/api/workflows/reviewOrderRequest/invoke -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' -d '{"data":{"orderId":"44"}}'
+```
+
+The review lands in the same **reviewer** queue. Resolve it, and the Invoke Tool shows the result.
 
 Everything in `docker-compose.yml` is local: one Postgres database, `longtail`, holding Long Tail's tables and DBOS's system tables (in the `dbos` schema), the Long Tail container (API, dashboard and delivery relay) and the example app. Nothing calls out to the internet.
 
@@ -114,7 +166,7 @@ Run Long Tail with the provider, either from this repo's image (`node build/star
 | `PORT`, `JWT_SECRET` | Long Tail's HTTP port and token secret. |
 | `LT_ADMIN_USER`, `LT_ADMIN_PASSWORD`, `LT_ADMIN_EMAIL` | The seeded admin. |
 | `LT_ROLES` | Comma-separated roles to create, such as `reviewer,finance`. |
-| `LT_START_CONFIG` | Optional JSON file with further `start()` settings, such as role titles or SSO. |
+| `LT_START_CONFIG` | Optional JSON file with further `start()` settings, such as role titles, SSO, or `workers` that register workflows for invoke. |
 
 In your own code:
 
@@ -127,6 +179,46 @@ await start({
   durable: { provider: await dbosProvider({ systemDatabaseUrl: process.env.DBOS_SYSTEM_DATABASE_URL! }) },
 });
 ```
+
+### Start workflows from Long Tail
+
+Register a workflow, and people, services and agents can start it from the Invoke Tool, `POST /api/workflows/:type/invoke` or the `invoke_workflow` MCP tool. A config with a `cronSchedule` runs it on that schedule. Long Tail passes every workflow it starts one argument, the envelope:
+
+```ts
+import { DBOS } from '@dbos-inc/dbos-sdk';
+import type { LTEnvelope } from '@hotmeshio/long-tail-dbos';
+
+async function reviewOrderRequestFn(envelope: LTEnvelope<{ orderId: string }>) {
+  return { data: await reviewOrderFn(envelope.data.orderId) };
+}
+
+export const reviewOrderRequest = DBOS.registerWorkflow(reviewOrderRequestFn, { name: 'reviewOrderRequest' });
+
+await DBOS.launch();
+await DBOS.registerQueue('orders');      // Long Tail enqueues invoked workflows here
+```
+
+- `envelope.data` is the invoke input, checked against the config's `inputSchema` before anything starts.
+- `envelope.metadata` carries the caller's metadata; `envelope.lt` says who started the run.
+- Returning `{ data }` shows that payload in the Invoke Tool when the run completes.
+
+Register the workflow in code, through `workers` in `start()` or `LT_START_CONFIG`; `taskQueue` is the DBOS queue name:
+
+```json
+{
+  "workers": [{
+    "taskQueue": "orders",
+    "workflow": "reviewOrderRequest",
+    "config": {
+      "invocable": true,
+      "invocationRoles": ["reviewer"],
+      "inputSchema": { "type": "object", "properties": { "orderId": { "type": "string" } }, "required": ["orderId"] }
+    }
+  }]
+}
+```
+
+The dashboard's Registry page, `PUT /api/workflows/:type/config` and the `upsert_workflow_config` MCP tool register workflows too. The invoke checks match HotMesh's: `invocable`, invocation roles, bot key scopes, the input schema and `execute_as`.
 
 ## FAQ
 
@@ -159,7 +251,10 @@ Long Tail opens a wait once per `(workflowId, key)`, so a retried `lt.open` step
 - `timeout` (for example `'48h'`) becomes the escalation's expiry. Long Tail expires the row on time and delivers `expired`; `conditional()` returns `null`.
 - DBOS gives `recv` a default timeout of 60 seconds, so `conditional()` always sets its own: the SLA plus ten minutes of grace, so Long Tail's expiry arrives first.
 - With no SLA, the backstop is `maxWaitSeconds` (default 365 days).
-- If the backstop passes before any outcome, the `lt.close` step cancels the escalation and `conditional()` returns `null`.
+- If the deadline passes before any outcome arrives, the `lt.close` step settles from the escalation row itself:
+  - a row Long Tail already resolved or expired returns that outcome, even when its delivery never ran;
+  - a row still pending is cancelled and `conditional()` returns `null`, unless a resolve wins that race, in which case the resolve is returned;
+  - while Long Tail is unreachable the step retries, so the workflow never mistakes an outage for a cancellation.
 
 ### What does the dashboard show for a DBOS workflow?
 
@@ -205,13 +300,12 @@ Source available: Apache 2.0 with the Commons Clause.
 
 See [LICENSE](LICENSE); its summary is a convenience and the license text governs.
 
-### What is out of scope today?
+### Which Long Tail features need HotMesh?
 
-- Batch and accumulate escalations, where one row collects many items.
-- Starting DBOS workflows from Long Tail.
-- DBOS schedules.
-- Running HotMesh and DBOS workflows in one deployment.
-- DBOS suspend mode.
+- HotMesh workflows running beside DBOS workflows in one Long Tail deployment.
+- YAML pipelines, triage and the AI query surfaces.
+
+DBOS offers suspend mode, which releases a parked workflow's memory, in DBOS Enterprise. This package parks waits in `recv`, as described under memory per parked wait.
 
 ## Development
 

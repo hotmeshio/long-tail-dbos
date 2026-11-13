@@ -11,6 +11,7 @@ import {
   type LTWorkflowExecution,
   type LTWorkflowListQuery,
   type LTWorkflowPage,
+  type LTWorkflowStartInput,
 } from '@hotmeshio/long-tail';
 
 import { COUNT_POOL_SIZE, PROVIDER_NAME, STEP_PAGE_SIZE } from '../constants';
@@ -26,7 +27,7 @@ export interface DbosProviderConfig {
 }
 
 /** The subset of DBOSClient the provider calls. */
-export type DbosClientLike = Pick<DBOSClient, 'getWorkflow' | 'listWorkflows' | 'listWorkflowSteps' | 'send' | 'cancelWorkflow' | 'destroy'>;
+export type DbosClientLike = Pick<DBOSClient, 'getWorkflow' | 'listWorkflows' | 'listWorkflowSteps' | 'send' | 'enqueue' | 'cancelWorkflow' | 'destroy'>;
 
 export interface DbosProvider extends LTDurableProvider {
   /** Release the client's and the counter's database pools. */
@@ -56,7 +57,7 @@ export async function dbosProvider(config: DbosProviderConfig): Promise<DbosProv
 export function createDbosProvider(client: DbosClientLike, countWorkflows?: WorkflowCounter): DbosProvider {
   return {
     name: PROVIDER_NAME,
-    capabilities: { native: false, execution: true, terminate: true, list: !!countWorkflows },
+    capabilities: { native: false, execution: true, terminate: true, list: !!countWorkflows, start: true },
 
     async deliver(ref: LTWaitRef, outcome: LTWaitOutcome): Promise<LTDeliveryResult> {
       // A send to a finished workflow is stored and never read, so check first.
@@ -69,6 +70,11 @@ export function createDbosProvider(client: DbosClientLike, countWorkflows?: Work
         if (err instanceof DBOSErrors.DBOSNonExistentWorkflowError) return DELIVERY_RESULT.GONE;
         throw err;
       }
+    },
+
+    /** Enqueues on the queue the config names; the app declares it with `new WorkflowQueue(name)`. */
+    async start({ workflowType, workflowId, taskQueue, args }: LTWorkflowStartInput): Promise<void> {
+      await client.enqueue({ queueName: taskQueue, workflowName: workflowType, workflowID: workflowId }, ...args);
     },
 
     async describe(workflowId: string): Promise<LTJobStatus> {

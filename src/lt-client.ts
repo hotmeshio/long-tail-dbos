@@ -1,5 +1,6 @@
 import { getLongTailConnection } from './config';
 import { LT_PATHS, WAIT_DEFAULTS } from './constants';
+import type { LTCollectionConfig } from './types';
 
 /** A non-2xx response or transport failure from Long Tail. */
 export class LongTailRequestError extends Error {
@@ -15,7 +16,7 @@ export class LongTailRequestError extends Error {
   }
 }
 
-export interface OpenWaitBody {
+export interface OpenWaitBody extends LTCollectionConfig {
   workflowId: string;
   runScope: string;
   workflowType?: string;
@@ -41,6 +42,20 @@ export function postOpenWait(body: OpenWaitBody): Promise<OpenWaitResponse> {
   return request<OpenWaitResponse>('POST', LT_PATHS.OPEN_WAIT, body);
 }
 
+/** The fields of an escalation row that decide a wait's outcome. */
+export interface EscalationState {
+  status: string;
+  resolver_payload?: Record<string, unknown> | string | null;
+  resolved_by?: string | null;
+  resolved_at?: string | null;
+  updated_at?: string | null;
+}
+
+/** GET /api/escalations/:id. */
+export function getEscalation(escalationId: string): Promise<EscalationState> {
+  return request<EscalationState>('GET', LT_PATHS.ESCALATION(escalationId), undefined);
+}
+
 /** POST /api/escalations/:id/cancel. A row that is already closed is not an error. */
 export async function postCancel(escalationId: string): Promise<void> {
   try {
@@ -61,7 +76,7 @@ async function request<T>(method: string, path: string, body: unknown): Promise<
     response = await fetch(target, {
       method,
       headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(body),
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       signal: controller.signal,
     });
   } catch (err) {

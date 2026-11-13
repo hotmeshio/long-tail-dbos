@@ -17,7 +17,7 @@ RUN npm run build
 FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-ARG LONG_TAIL_SPEC=@hotmeshio/long-tail@^0.35.0
+ARG LONG_TAIL_SPEC=@hotmeshio/long-tail@^0.36.0
 COPY vendor ./vendor
 RUN echo '{"name":"long-tail-dbos-runtime","private":true}' > package.json \
   && LT="$(ls ./vendor/*.tgz 2>/dev/null | head -1 || true)" \

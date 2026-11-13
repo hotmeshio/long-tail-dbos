@@ -12,9 +12,9 @@ describe('e2e: the engine surfaces on DBOS', () => {
     admin = await LongTail.login();
   });
 
-  it('settings report DBOS with execution, terminate and list', async () => {
+  it('settings report DBOS with execution, terminate, list and start', async () => {
     const settings = await admin.request<{ engine: Record<string, unknown> }>('GET', '/api/settings');
-    expect(settings.engine).toMatchObject({ provider: 'dbos', native: false, capabilities: { execution: true, terminate: true, list: true } });
+    expect(settings.engine).toMatchObject({ provider: 'dbos', native: false, capabilities: { execution: true, terminate: true, list: true, start: true } });
   });
 
   it('the executions list pages DBOS workflows by id prefix and state', async () => {
@@ -54,7 +54,7 @@ describe('e2e: the engine surfaces on DBOS', () => {
   });
 
   it('routes that run HotMesh workflows answer 501 and name the engine', async () => {
-    for (const path of ['/api/yaml-workflows', '/api/tasks', '/api/workflows/discovered']) {
+    for (const path of ['/api/yaml-workflows', '/api/tasks', '/api/workflows/workers']) {
       const reply = await admin.send<{ error: string }>('GET', path);
       expect(reply.status, path).toBe(501);
       expect(reply.data.error).toContain('dbos');
@@ -66,6 +66,7 @@ describe('e2e: the engine surfaces on DBOS', () => {
     const names = catalog.categories.flatMap((c) => c.tools.map((t) => t.name));
     expect(names).toEqual(expect.arrayContaining(['find_escalations', 'claim_escalation', 'resolve_escalation']));
     expect(names).not.toContain('list_yaml_workflows');
-    expect(names).not.toContain('invoke_workflow');
+    expect(names).toContain('invoke_workflow');
+    expect(names).not.toContain('list_discovered_workflows');
   });
 });

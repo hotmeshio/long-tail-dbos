@@ -42,10 +42,31 @@ describe('conditional', () => {
     expect(ltClose).not.toHaveBeenCalled();
   });
 
-  it('closes the row and returns null when the recv deadline passes first', async () => {
+  it('returns the collection an expiry kept', async () => {
+    const kept = { $accumulated: [{ itemKey: 'ana', at: '2026-11-13T00:00:00.000Z' }], $trigger: 'timeout' };
+    dbos.recv.mockResolvedValueOnce({ waitKey: 'review', escalationId: 'e-1', status: 'expired', data: kept });
+    await expect(conditional('review', { ...CONFIG, accumulate: { max: 3 } })).resolves.toEqual(kept);
+  });
+
+  it('settles from the row when the recv deadline passes first', async () => {
     dbos.recv.mockResolvedValue(null);
+    (ltClose as any).mockResolvedValueOnce({ waitKey: 'review', escalationId: 'e-1', status: 'cancelled' });
     await expect(conditional('review', CONFIG)).resolves.toBeNull();
-    expect(ltClose).toHaveBeenCalledWith('e-1');
+    expect(ltClose).toHaveBeenCalledWith('e-1', 'review');
+  });
+
+  it('returns an outcome Long Tail committed but had not delivered by the deadline', async () => {
+    dbos.recv.mockResolvedValue(null);
+    (ltClose as any).mockResolvedValueOnce({ waitKey: 'review', escalationId: 'e-1', status: 'resolved', data: { approved: true } });
+    await expect(conditional('review', CONFIG)).resolves.toEqual({ approved: true });
+    (ltClose as any).mockResolvedValueOnce({ waitKey: 'review', escalationId: 'e-1', status: 'expired', data: { $trigger: 'timeout' } });
+    await expect(conditional('review', CONFIG)).resolves.toEqual({ $trigger: 'timeout' });
+  });
+
+  it('returns null when a step recorded by an earlier version replays with no outcome', async () => {
+    dbos.recv.mockResolvedValue(null);
+    (ltClose as any).mockResolvedValueOnce(undefined);
+    await expect(conditional('review', CONFIG)).resolves.toBeNull();
   });
 
   it('returns an empty object when resolved without data', async () => {

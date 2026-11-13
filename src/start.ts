@@ -4,13 +4,14 @@ import { start } from '@hotmeshio/long-tail';
 import { dbosProvider } from './provider';
 
 const DEFAULT_ADMIN = 'superadmin';
-const ENV_OWNED_KEYS = ['database', 'server', 'durable', 'workers', 'examples'];
+const ENV_OWNED_KEYS = ['database', 'server', 'durable', 'examples'];
 
 /**
  * Long Tail with DBOS as the durable engine, configured from the environment:
  * DBOS_SYSTEM_DATABASE_URL (defaults to DATABASE_URL, one database), DBOS_SYSTEM_DATABASE_SCHEMA, DBOS_CONSOLE_URL,
  * DATABASE_URL or POSTGRES_*, PORT, JWT_SECRET, LT_ADMIN_USER / LT_ADMIN_PASSWORD / LT_ADMIN_EMAIL, LT_ROLES.
- * LT_START_CONFIG optionally names a JSON file with further start() settings.
+ * LT_START_CONFIG optionally names a JSON file with further start() settings,
+ * such as `workers` entries that register DBOS workflows for invoke.
  */
 export async function startLongTailDbos(env: NodeJS.ProcessEnv = process.env) {
   // 1. DBOS provider

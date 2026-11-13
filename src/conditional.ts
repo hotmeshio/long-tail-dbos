@@ -1,6 +1,6 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 
-import { CLOSE_REASON_DEADLINE, WAIT_DEFAULTS } from './constants';
+import { CLOSE_REASON_DEADLINE, ESCALATION_STATUS, WAIT_DEFAULTS } from './constants';
 import { toMs } from './duration';
 import { ltClose, ltOpen } from './steps';
 import type { LTConditionalConfig, LTWaitOutcome } from './types';
@@ -10,7 +10,9 @@ import type { LTConditionalConfig, LTWaitOutcome } from './types';
  *
  * Opens an escalation in `config.role`, parks the workflow in DBOS.recv, and
  * returns the resolver payload. Returns null when the escalation expires or
- * is cancelled. `key` is unique per wait within one workflow.
+ * is cancelled. A `batch` or `accumulate` wait returns its collection, also
+ * on an expiry that kept one (an accumulator, or `partialOnTimeout`).
+ * `key` is unique per wait within one workflow.
  */
 export async function conditional<T = Record<string, unknown>>(key: string, config: LTConditionalConfig): Promise<T | null> {
   if (!key) throw new Error('conditional(key): key is required');
@@ -23,13 +25,18 @@ export async function conditional<T = Record<string, unknown>>(key: string, conf
   // 2. Park until Long Tail delivers; DBOS defaults recv to 60 s, so the deadline is explicit
   const outcome = await DBOS.recv<LTWaitOutcome>(key, { timeoutSeconds: waitSeconds(config) });
 
-  // 3. No outcome means the backstop passed first: close the row
+  // 3. No outcome means the backstop passed first: the row's own outcome decides
   if (!outcome) {
-    DBOS.logger.warn(`long-tail-dbos: ${key} reached its recv deadline (${CLOSE_REASON_DEADLINE}); cancelling ${opened.escalationId}`);
-    await ltClose(opened.escalationId);
-    return null;
+    DBOS.logger.warn(`long-tail-dbos: ${key} reached its recv deadline (${CLOSE_REASON_DEADLINE}); settling ${opened.escalationId}`);
+    return valueOf<T>(await ltClose(opened.escalationId, key));
   }
-  return outcome.status === 'resolved' ? ((outcome.data ?? {}) as T) : null;
+  return valueOf<T>(outcome);
+}
+
+/** The value `conditional` returns for an outcome. A step recorded by an earlier version returns nothing. */
+function valueOf<T>(outcome: LTWaitOutcome | undefined): T | null {
+  if (outcome?.status === ESCALATION_STATUS.RESOLVED) return (outcome.data ?? {}) as T;
+  return outcome?.status === ESCALATION_STATUS.EXPIRED && outcome.data ? (outcome.data as T) : null;
 }
 
 /** recv deadline: the SLA plus a grace period, or the max wait when there is no SLA. */

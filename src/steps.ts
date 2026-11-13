@@ -1,9 +1,9 @@
 import { DBOS, Error as DBOSErrors } from '@dbos-inc/dbos-sdk';
 
-import { STEP, WAIT_DEFAULTS } from './constants';
+import { ESCALATION_STATUS, STEP, WAIT_DEFAULTS } from './constants';
 import { toMs } from './duration';
-import { postCancel, postOpenWait } from './lt-client';
-import type { LTConditionalConfig, OpenedWait } from './types';
+import { getEscalation, postCancel, postOpenWait, type EscalationState } from './lt-client';
+import type { LTCollectionConfig, LTConditionalConfig, LTWaitOutcome, OpenedWait } from './types';
 
 /** Open the escalation this workflow waits on. Runs as a checkpointed step. */
 export async function openWait(waitKey: string, config: LTConditionalConfig): Promise<OpenedWait> {
@@ -25,13 +25,51 @@ export async function openWait(waitKey: string, config: LTConditionalConfig): Pr
     metadata: config.metadata,
     data: config.data,
     ...(expiresAt ? { expiresAt } : {}),
+    ...collectionOf(config),
   });
   return { escalationId: opened.escalationId, waitKey, status: opened.status, expiresAt, workflowType };
 }
 
-/** Cancel the escalation when the recv deadline passes first. */
-export async function closeWait(escalationId: string): Promise<void> {
+/** The batch or accumulate declaration, only the fields the config sets. */
+function collectionOf(config: LTConditionalConfig): LTCollectionConfig {
+  const { batch, filled, wakeOnFill, wakeOnFlag, partialOnTimeout, accumulate } = config;
+  return Object.fromEntries(
+    Object.entries({ batch, filled, wakeOnFill, wakeOnFlag, partialOnTimeout, accumulate }).filter(([, v]) => v !== undefined),
+  );
+}
+
+/**
+ * Settle the wait when the recv deadline passes first. The row decides: an
+ * outcome Long Tail committed but has not delivered yet is returned as is;
+ * a row still pending is cancelled, then read again, because a resolve may
+ * win the race with the cancel.
+ */
+export async function closeWait(escalationId: string, waitKey: string): Promise<LTWaitOutcome> {
+  // 1. Read the row
+  const row = await getEscalation(escalationId);
+  if (row.status !== ESCALATION_STATUS.PENDING) return outcomeOf(escalationId, waitKey, row);
+
+  // 2. Cancel it, then read what was committed
   await postCancel(escalationId);
+  const settled = await getEscalation(escalationId);
+  if (settled.status === ESCALATION_STATUS.PENDING) {
+    throw new Error(`long-tail-dbos: escalation ${escalationId} is still pending after cancel`);
+  }
+  return outcomeOf(escalationId, waitKey, settled);
+}
+
+/** The outcome a delivery would have carried for this row. */
+function outcomeOf(escalationId: string, waitKey: string, row: EscalationState): LTWaitOutcome {
+  const data = typeof row.resolver_payload === 'string' ? JSON.parse(row.resolver_payload) : row.resolver_payload;
+  const at = row.resolved_at ?? row.updated_at;
+  return {
+    waitKey,
+    escalationId,
+    status: row.status as LTWaitOutcome['status'],
+    ...(data && row.status !== ESCALATION_STATUS.CANCELLED ? { data } : {}),
+    ...(row.resolved_by ? { resolvedBy: row.resolved_by } : {}),
+    ...(at ? { resolvedAt: new Date(at).toISOString() } : {}),
+  };
 }
 
 function register<Args extends unknown[], R>(fn: (...args: Args) => Promise<R>, name: string) {

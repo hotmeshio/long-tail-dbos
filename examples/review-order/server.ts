@@ -3,7 +3,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 
 import { configureLongTail } from '../../src';
 import { bootstrapApiKey } from './bootstrap';
-import { reviewOrder } from './workflow';
+import { ORDERS_QUEUE, reviewOrder } from './workflow';
 
 // A DBOS app process. POST /orders/:id starts a review; the wait shows up in Long Tail.
 // ?sla=30m sets the review deadline (default 48h).
@@ -13,6 +13,7 @@ async function main(): Promise<void> {
   configureLongTail({ url, apiKey: process.env.LT_API_KEY || (await bootstrapApiKey(url)) });
   DBOS.setConfig({ name: 'review-order', systemDatabaseUrl: process.env.DBOS_SYSTEM_DATABASE_URL });
   await DBOS.launch();
+  await DBOS.registerQueue(ORDERS_QUEUE);
 
   const port = Number(process.env.PORT ?? 4000);
   createServer(async (req, res) => {
