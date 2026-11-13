@@ -13,6 +13,41 @@
           "required": ["orderId"]
         }
       }
+    },
+    {
+      "taskQueue": "orders",
+      "workflow": "inspectOrderRequest",
+      "config": {
+        "invocable": true,
+        "description": "Inspect both sides of an order in one escalation",
+        "invocationRoles": ["reviewer"],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "orderId": { "type": "string", "title": "Order id" },
+            "timeout": { "type": "string", "title": "Deadline, such as 48h" }
+          },
+          "required": ["orderId"]
+        }
+      }
+    },
+    {
+      "taskQueue": "orders",
+      "workflow": "collectApprovalsRequest",
+      "config": {
+        "invocable": true,
+        "description": "Collect approvals for an order until enough arrive",
+        "invocationRoles": ["reviewer"],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "orderId": { "type": "string", "title": "Order id" },
+            "approvals": { "type": "integer", "minimum": 1, "title": "Approvals needed" },
+            "timeout": { "type": "string", "title": "Deadline, such as 48h" }
+          },
+          "required": ["orderId"]
+        }
+      }
     }
   ]
 }

@@ -53,6 +53,18 @@ describe('lt.open / lt.close steps', () => {
     expect((postOpenWait as any).mock.calls[0][0]).not.toHaveProperty('expiresAt');
   });
 
+  it('sends a batch or accumulate declaration with only the fields set', async () => {
+    const filled = { left: { payload: { passed: true }, at: '2026-11-13T00:00:00.000Z' } };
+    await openWait('inspect', { role: 'reviewer', type: 't', batch: ['left', 'right'], filled, partialOnTimeout: true });
+    const body = (postOpenWait as any).mock.calls[0][0];
+    expect(body).toMatchObject({ batch: ['left', 'right'], filled, partialOnTimeout: true });
+    expect(body).not.toHaveProperty('accumulate');
+    expect(body).not.toHaveProperty('wakeOnFill');
+
+    await openWait('approvals', { role: 'reviewer', type: 't', accumulate: { max: 2 } });
+    expect((postOpenWait as any).mock.calls[1][0]).toMatchObject({ accumulate: { max: 2 } });
+  });
+
   it('throws outside a workflow', async () => {
     dbos.workflowID = undefined;
     await expect(openWait('review', { role: 'r', type: 't' })).rejects.toThrow(/inside a DBOS workflow/);

@@ -10,7 +10,9 @@ import type { LTConditionalConfig, LTWaitOutcome } from './types';
  *
  * Opens an escalation in `config.role`, parks the workflow in DBOS.recv, and
  * returns the resolver payload. Returns null when the escalation expires or
- * is cancelled. `key` is unique per wait within one workflow.
+ * is cancelled. A `batch` or `accumulate` wait returns its collection, also
+ * on an expiry that kept one (an accumulator, or `partialOnTimeout`).
+ * `key` is unique per wait within one workflow.
  */
 export async function conditional<T = Record<string, unknown>>(key: string, config: LTConditionalConfig): Promise<T | null> {
   if (!key) throw new Error('conditional(key): key is required');
@@ -29,7 +31,8 @@ export async function conditional<T = Record<string, unknown>>(key: string, conf
     await ltClose(opened.escalationId);
     return null;
   }
-  return outcome.status === 'resolved' ? ((outcome.data ?? {}) as T) : null;
+  if (outcome.status === 'resolved') return (outcome.data ?? {}) as T;
+  return outcome.status === 'expired' && outcome.data ? (outcome.data as T) : null;
 }
 
 /** recv deadline: the SLA plus a grace period, or the max wait when there is no SLA. */

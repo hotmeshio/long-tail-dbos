@@ -1,5 +1,6 @@
 import { getLongTailConnection } from './config';
 import { LT_PATHS, WAIT_DEFAULTS } from './constants';
+import type { LTCollectionConfig } from './types';
 
 /** A non-2xx response or transport failure from Long Tail. */
 export class LongTailRequestError extends Error {
@@ -15,7 +16,7 @@ export class LongTailRequestError extends Error {
   }
 }
 
-export interface OpenWaitBody {
+export interface OpenWaitBody extends LTCollectionConfig {
   workflowId: string;
   runScope: string;
   workflowType?: string;

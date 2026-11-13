@@ -3,7 +3,7 @@ import { DBOS, Error as DBOSErrors } from '@dbos-inc/dbos-sdk';
 import { STEP, WAIT_DEFAULTS } from './constants';
 import { toMs } from './duration';
 import { postCancel, postOpenWait } from './lt-client';
-import type { LTConditionalConfig, OpenedWait } from './types';
+import type { LTCollectionConfig, LTConditionalConfig, OpenedWait } from './types';
 
 /** Open the escalation this workflow waits on. Runs as a checkpointed step. */
 export async function openWait(waitKey: string, config: LTConditionalConfig): Promise<OpenedWait> {
@@ -25,8 +25,17 @@ export async function openWait(waitKey: string, config: LTConditionalConfig): Pr
     metadata: config.metadata,
     data: config.data,
     ...(expiresAt ? { expiresAt } : {}),
+    ...collectionOf(config),
   });
   return { escalationId: opened.escalationId, waitKey, status: opened.status, expiresAt, workflowType };
+}
+
+/** The batch or accumulate declaration, only the fields the config sets. */
+function collectionOf(config: LTConditionalConfig): LTCollectionConfig {
+  const { batch, filled, wakeOnFill, wakeOnFlag, partialOnTimeout, accumulate } = config;
+  return Object.fromEntries(
+    Object.entries({ batch, filled, wakeOnFill, wakeOnFlag, partialOnTimeout, accumulate }).filter(([, v]) => v !== undefined),
+  );
 }
 
 /** Cancel the escalation when the recv deadline passes first. */

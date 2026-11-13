@@ -42,6 +42,12 @@ describe('conditional', () => {
     expect(ltClose).not.toHaveBeenCalled();
   });
 
+  it('returns the collection an expiry kept', async () => {
+    const kept = { $accumulated: [{ itemKey: 'ana', at: '2026-11-13T00:00:00.000Z' }], $trigger: 'timeout' };
+    dbos.recv.mockResolvedValueOnce({ waitKey: 'review', escalationId: 'e-1', status: 'expired', data: kept });
+    await expect(conditional('review', { ...CONFIG, accumulate: { max: 3 } })).resolves.toEqual(kept);
+  });
+
   it('closes the row and returns null when the recv deadline passes first', async () => {
     dbos.recv.mockResolvedValue(null);
     await expect(conditional('review', CONFIG)).resolves.toBeNull();

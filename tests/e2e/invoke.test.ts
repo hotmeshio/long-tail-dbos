@@ -57,12 +57,13 @@ describe('e2e: registering and invoking DBOS workflows from Long Tail', () => {
   it('starts the workflow on its cron schedule', async () => {
     const config = await admin.request<any>('GET', `/api/workflows/${WORKFLOW}/config`);
     const orderId = runId('cron');
+    const since = Date.now();
     const scheduled = { ...config, cron_schedule: '* * * * *', envelope_schema: { data: { orderId }, metadata: {} } };
     await admin.request('PUT', `/api/workflows/${WORKFLOW}/config`, scheduled);
     try {
       const run = await eventually(async () => {
-        const { jobs } = await admin.request<any>('GET', `/api/workflow-states/jobs?search=${WORKFLOW}-cron-&limit=5`);
-        return jobs?.[0];
+        const { jobs } = await admin.request<any>('GET', `/api/workflow-states/jobs?search=${WORKFLOW}-cron-&status=running&limit=20`);
+        return jobs?.find((job: any) => job.created_at && Date.parse(job.created_at) >= since);
       }, 'a scheduled run', 80_000);
       expect(run.workflow_id).toMatch(new RegExp(`^${WORKFLOW}-cron-`));
       const row = await admin.pendingEscalation(run.workflow_id);

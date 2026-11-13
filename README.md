@@ -59,6 +59,46 @@ const answer = await conditional<T>(key, ask);
 
 The same call works in HotMesh and Temporal workflows. Long Tail's documentation is at [hotmesh.io](https://hotmesh.io/docs/start/quickstart); [conditional()](https://hotmesh.io/docs/build/conditional) covers roles, forms and facets in depth.
 
+### Collect many items in one escalation
+
+One wait can gather many answers: both sides of an inspection, every box in a delivery, approvals from several people. Declare it in `conditional()` with the same fields HotMesh workflows use. `LTAccumulatorResult` and `LTBatchMarkers` come from `@hotmeshio/long-tail-dbos`.
+
+```ts
+// One fill per declared key; the last fill returns every item, keyed by item.
+const sides = await conditional<Record<'left' | 'right', { passed: boolean }>>(`inspect-${orderId}`, {
+  role: 'reviewer',
+  type: 'order-inspection',
+  metadata: { orderId },
+  batch: ['left', 'right'],
+  partialOnTimeout: true,          // on expiry, return the sides inspected so far
+  timeout: '4h',
+});
+
+// Any item keys until `max` arrive, the deadline passes, or a person closes it.
+const approvals = await conditional<LTAccumulatorResult<{ approver: string }>>(`approvals-${orderId}`, {
+  role: 'reviewer',
+  type: 'order-approvals',
+  metadata: { orderId },
+  accumulate: { max: 2 },
+  timeout: '24h',
+});
+approvals?.$accumulated.map((item) => item.payload?.approver);   // in arrival order
+approvals?.$trigger;                                               // 'count', 'timeout' or 'resolve'
+```
+
+People, services and agents fill items through `POST /api/escalations/:id/resolve-batch-item` and `POST /api/escalations/:id/accumulate`, the matching MCP tools, scan rules or the dashboard. Each batch item is validated against the role's form.
+
+| Declaration | Returns |
+|---|---|
+| `batch` | Every item when the last key is filled |
+| `batch` + `wakeOnFill` | The items so far when a listed key is filled, with `$filled` and `$trigger: 'fill'` |
+| `batch` + `wakeOnFlag` | The items so far when someone flags an item, with `$flags` and `$trigger: 'flag'` |
+| `batch` + `partialOnTimeout` | On expiry, the items so far with `$trigger: 'timeout'` |
+| `batch` + `filled` | Starts with those items already satisfied |
+| `accumulate` | `$accumulated` and `$trigger`: `count` at `max`, `timeout` on expiry, `resolve` (with the resolver's payload) when a person closes it |
+
+Cancellation returns `null`, as for any wait. A batch without `partialOnTimeout` returns `null` on expiry.
+
 ## Getting started in five minutes
 
 You need Docker.
@@ -78,7 +118,7 @@ docker compose restart review-order      # the app goes away mid-wait
 # resolve order 43 in the dashboard; the restarted app recovers the workflow and it completes
 ```
 
-Start one from Long Tail instead: open **Invoke Tool**, choose `reviewOrderRequest`, enter an order id and submit. Or over HTTP:
+Start one from Long Tail instead: open **Invoke Tool**, choose `reviewOrderRequest`, enter an order id and submit. `inspectOrderRequest` and `collectApprovalsRequest` show batch and accumulate waits the same way. Or over HTTP:
 
 ```bash
 TOKEN=$(curl -s -X POST localhost:3400/api/auth/login -H 'content-type: application/json' \
@@ -259,7 +299,6 @@ See [LICENSE](LICENSE); its summary is a convenience and the license text govern
 
 ### Which Long Tail features need HotMesh?
 
-- Batch and accumulate escalations, where one row collects many items. The item fold runs inside HotMesh's wait today.
 - HotMesh workflows running beside DBOS workflows in one Long Tail deployment.
 - YAML pipelines, triage and the AI query surfaces.
 

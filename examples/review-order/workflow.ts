@@ -1,6 +1,6 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 
-import { conditional, type LTEnvelope } from '../../src';
+import { conditional, type LTAccumulatorResult, type LTBatchMarkers, type LTEnvelope } from '../../src';
 
 export interface ReviewDecision {
   approved: boolean;
@@ -45,3 +45,39 @@ async function reviewOrderRequestFn(envelope: LTEnvelope<{ orderId: string }>): 
 }
 
 export const reviewOrderRequest = DBOS.registerWorkflow(reviewOrderRequestFn, { name: 'reviewOrderRequest' });
+
+export type InspectedSides = Partial<Record<'left' | 'right', { passed: boolean }>> & LTBatchMarkers;
+
+/** Invoked from Long Tail: one escalation, one fill per side. On expiry it returns the sides inspected so far. */
+async function inspectOrderRequestFn(envelope: LTEnvelope<{ orderId: string; timeout?: string }>) {
+  const { orderId, timeout = '48h' } = envelope.data;
+  const sides = await conditional<InspectedSides>(`inspect-${orderId}`, {
+    role: 'reviewer',
+    type: 'order-inspection',
+    description: `Inspect both sides of order ${orderId}`,
+    metadata: { orderId },
+    batch: ['left', 'right'],
+    partialOnTimeout: true,
+    timeout,
+  });
+  return { data: { orderId, sides } };
+}
+
+export const inspectOrderRequest = DBOS.registerWorkflow(inspectOrderRequestFn, { name: 'inspectOrderRequest' });
+
+/** Invoked from Long Tail: collects approvals until `approvals` arrive, the deadline passes, or a person closes it. */
+async function collectApprovalsRequestFn(envelope: LTEnvelope<{ orderId: string; approvals?: number; timeout?: string }>) {
+  const { orderId, approvals = 2, timeout = '48h' } = envelope.data;
+  const collected = await conditional<LTAccumulatorResult<{ approver: string }>>(`approvals-${orderId}`, {
+    role: 'reviewer',
+    type: 'order-approvals',
+    description: `Collect ${approvals} approvals for order ${orderId}`,
+    metadata: { orderId },
+    accumulate: { max: approvals },
+    timeout,
+  });
+  if (!collected) return { data: { orderId, status: 'cancelled' } };
+  return { data: { orderId, trigger: collected.$trigger, approvers: collected.$accumulated.map((item) => item.payload?.approver) } };
+}
+
+export const collectApprovalsRequest = DBOS.registerWorkflow(collectApprovalsRequestFn, { name: 'collectApprovalsRequest' });
