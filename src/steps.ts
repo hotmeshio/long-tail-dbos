@@ -3,7 +3,7 @@ import { DBOS, Error as DBOSErrors } from '@dbos-inc/dbos-sdk';
 import { ESCALATION_STATUS, STEP, WAIT_DEFAULTS } from './constants';
 import { toMs } from './duration';
 import { getEscalation, postCancel, postOpenWait, type EscalationState } from './lt-client';
-import type { LTCollectionConfig, LTConditionalConfig, LTWaitOutcome, OpenedWait } from './types';
+import type { LTCollectionConfig, LTConditionalConfig, LTWaitFields, LTWaitOutcome, OpenedWait } from './types';
 
 /** Open the escalation this workflow waits on. Runs as a checkpointed step. */
 export async function openWait(waitKey: string, config: LTConditionalConfig): Promise<OpenedWait> {
@@ -26,6 +26,7 @@ export async function openWait(waitKey: string, config: LTConditionalConfig): Pr
     data: config.data,
     ...(expiresAt ? { expiresAt } : {}),
     ...collectionOf(config),
+    ...waitFieldsOf(config),
   });
   return { escalationId: opened.escalationId, waitKey, status: opened.status, expiresAt, workflowType };
 }
@@ -35,6 +36,14 @@ function collectionOf(config: LTConditionalConfig): LTCollectionConfig {
   const { batch, filled, wakeOnFill, wakeOnFlag, partialOnTimeout, accumulate } = config;
   return Object.fromEntries(
     Object.entries({ batch, filled, wakeOnFill, wakeOnFlag, partialOnTimeout, accumulate }).filter(([, v]) => v !== undefined),
+  );
+}
+
+/** The envelope, assignment, lineage and signal key, only the fields the config sets. */
+function waitFieldsOf(config: LTConditionalConfig): LTWaitFields {
+  const { envelope, lookups, files, schemaVersion, assignee, durationMinutes, originId, parentId, signalKey } = config;
+  return Object.fromEntries(
+    Object.entries({ envelope, lookups, files, schemaVersion, assignee, durationMinutes, originId, parentId, signalKey }).filter(([, v]) => v !== undefined),
   );
 }
 

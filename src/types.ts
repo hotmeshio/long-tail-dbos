@@ -17,12 +17,13 @@ export interface LongTailConnection {
   requestTimeoutMs?: number;
 }
 
-export interface LTConditionalConfig extends LTCollectionConfig {
+export interface LTConditionalConfig extends LTCollectionConfig, LTWaitFields {
   role: string;
   type: string;
   subtype?: string;
   description?: string;
-  priority?: 1 | 2 | 3 | 4;
+  /** 1 (most urgent) to 4. */
+  priority?: number;
   metadata?: Record<string, unknown>;
   /** Shown to the resolver. */
   data?: Record<string, unknown>;
@@ -30,6 +31,70 @@ export interface LTConditionalConfig extends LTCollectionConfig {
   timeout?: string | number;
   /** recv backstop when there is no SLA, in seconds. Default 365 days. */
   maxWaitSeconds?: number;
+  /** `conditional()` only: add `$resolution` (who resolved it, and when) to a resolved payload. */
+  withResolution?: boolean;
+}
+
+/** A knowledge entry the form reads. */
+export interface LTLookupRef {
+  domain: string;
+  key: string;
+  /** An edition number or label; the newest edition when absent. */
+  version?: number | string;
+  /** The name the form reads it under. */
+  as?: string;
+}
+
+/** A stored file the form shows. */
+export interface LTFileRef {
+  /** The storage key. */
+  path: string;
+  /** The name the form reads it under. */
+  as: string;
+  name?: string;
+  contentType?: string;
+  /** Seconds the signed link lasts. */
+  expiresIn?: number;
+}
+
+/** What the escalation carries beyond its queue and facets, as HotMesh's `conditional()` writes it. */
+export interface LTWaitFields {
+  /** Render-only data for the form: `formDefaults`, `confidence`, any `envelope.*` key. `batch_*` and `accumulate_*` keys are reserved. */
+  envelope?: Record<string, unknown>;
+  /** Stored as `envelope.lookups`. Pass it here or in `envelope`, not both. */
+  lookups?: LTLookupRef[];
+  /** Stored as `envelope.files`. Pass it here or in `envelope`, not both. */
+  files?: LTFileRef[];
+  /** The role form version the resolve UI renders, stored as `metadata.schema_version`. */
+  schemaVersion?: number;
+  /** Assigns the escalation when it is created; others can still claim it. */
+  assignee?: string;
+  /** With `assignee`: claims the escalation for this many minutes. */
+  durationMinutes?: number;
+  /** The first escalation of the chain or group this one belongs to. */
+  originId?: string;
+  /** The escalation this one follows from. */
+  parentId?: string;
+  /** Addresses the wait on the signal-key surfaces, such as resolve-by-signal-key. Unique across Long Tail. */
+  signalKey?: string;
+}
+
+/** A wait's terminal outcome, as `conditionalOutcome()` returns it. */
+export interface LTOutcome<T = Record<string, unknown>> {
+  status: 'resolved' | 'expired' | 'cancelled';
+  /** The resolver payload; on expiry, the collection an accumulator or `partialOnTimeout` batch kept; otherwise null. */
+  data: T | null;
+  escalationId: string;
+  resolvedBy: string | null;
+  /** ISO time the escalation closed. */
+  resolvedAt: string | null;
+}
+
+/** Resolution provenance `conditional({ withResolution: true })` adds to a resolved payload. */
+export interface LTResolution {
+  escalationId: string;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
 }
 
 /** Output of the lt.open step; stored in the checkpoint. */

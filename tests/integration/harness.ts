@@ -35,6 +35,7 @@ export async function launchDbos(identity: { executorID: string; applicationVers
 export interface Harness {
   provider: DbosProvider;
   adminToken: string;
+  adminUserId: string;
   shutdown(): Promise<void>;
 }
 
@@ -50,7 +51,7 @@ export async function startLongTail(): Promise<Harness> {
     durable: { provider, relay: { sweepMs: 300, reconcileMs: 0 } },
   } as any);
 
-  const login = await api<{ token: string }>('POST', '/api/auth/login', '', { username: ADMIN.externalId, password: ADMIN.password });
+  const login = await api<{ token: string; user: { id: string } }>('POST', '/api/auth/login', '', { username: ADMIN.externalId, password: ADMIN.password });
   const bot = await api<{ id: string }>('POST', '/api/bot-accounts', login.token, { name: 'dbos-workflows', roles: [{ role: 'reviewer', type: 'admin' }] });
   const key = await api<Record<string, string>>('POST', `/api/bot-accounts/${bot.id}/api-keys`, login.token, { name: 'e2e' });
   const apiKey = key.rawKey ?? key.key ?? key.api_key;
@@ -60,6 +61,7 @@ export async function startLongTail(): Promise<Harness> {
   return {
     provider,
     adminToken: login.token,
+    adminUserId: login.user.id,
     async shutdown() {
       await lt.shutdown();
       await provider.close();
@@ -103,3 +105,29 @@ export async function deliveryOf(escalationId: string): Promise<string> {
     await db.end();
   }
 }
+
+export interface EscalationRow {
+  id: string;
+  status: string;
+  role: string;
+  workflow_id: string;
+  metadata: Record<string, unknown>;
+  envelope: Record<string, unknown> | string | null;
+  assigned_to: string | null;
+  assigned_until: string | null;
+  origin_id: string | null;
+  parent_id: string | null;
+}
+
+/** The workflow's escalations, newest first. */
+export async function escalationsFor(workflowId: string, token: string): Promise<EscalationRow[]> {
+  const data = await api<EscalationRow[] | { escalations: EscalationRow[] }>('GET', `/api/escalations/by-workflow/${workflowId}`, token);
+  return Array.isArray(data) ? data : data.escalations;
+}
+
+/** The workflow's pending escalation of `type`, once it is open. */
+export function pendingRow(workflowId: string, token: string, type?: string): Promise<EscalationRow & { type: string }> {
+  return eventually(async () => (await escalationsFor(workflowId, token) as Array<EscalationRow & { type: string }>)
+    .find((r) => r.status === 'pending' && (!type || r.type === type)), `pending escalation for ${workflowId}`);
+}
+

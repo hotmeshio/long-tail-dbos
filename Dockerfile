@@ -1,13 +1,9 @@
-# Long Tail with the DBOS provider.
-# Installs @hotmeshio/long-tail from npm, or from vendor/*.tgz when present (scripts/pack-long-tail.sh).
+# Long Tail with the DBOS provider, installed from npm.
 
 FROM node:22-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
-COPY vendor ./vendor
-RUN npm install --no-audit --no-fund --ignore-scripts \
-  && LT="$(ls ./vendor/*.tgz 2>/dev/null | head -1 || true)" \
-  && if [ -n "$LT" ]; then npm install --no-save --no-audit --no-fund "$LT"; fi
+RUN npm ci --no-audit --no-fund --ignore-scripts
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
 COPY examples ./examples
@@ -17,18 +13,15 @@ RUN npm run build
 FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-ARG LONG_TAIL_SPEC=@hotmeshio/long-tail@^0.36.0
-COPY vendor ./vendor
+ARG LONG_TAIL_SPEC=@hotmeshio/long-tail@^0.36.1
 RUN echo '{"name":"long-tail-dbos-runtime","private":true}' > package.json \
-  && LT="$(ls ./vendor/*.tgz 2>/dev/null | head -1 || true)" \
-  && npm install --no-audit --no-fund --ignore-scripts @dbos-inc/dbos-sdk@^5.5.0 pg@^8.23.1 "${LT:-$LONG_TAIL_SPEC}" \
-  && rm -rf vendor
+  && npm install --no-audit --no-fund --ignore-scripts @dbos-inc/dbos-sdk@^5.5.0 pg@^8.23.1 "$LONG_TAIL_SPEC"
 COPY --from=builder /app/build ./build
 EXPOSE 3000
 CMD ["node", "build/start.js"]
 
-# The example DBOS app process (review-order). Uses tsx; a real app compiles its own code.
+# The example DBOS app process (review-order and machine-line). Uses tsx; a real app compiles its own code.
 FROM builder AS example
 ENV NODE_ENV=production
 EXPOSE 4000
-CMD ["npx", "tsx", "examples/review-order/server.ts"]
+CMD ["npx", "tsx", "examples/server.ts"]
