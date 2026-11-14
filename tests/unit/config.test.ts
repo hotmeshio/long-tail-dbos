@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 
-import { configureLongTail, getLongTailConnection, resetLongTailConnection, validConnection } from '../../src/config';
+import { configureLongTail, getLongTailConnection, isInProcess, resetLongTailConnection, validConnection } from '../../src/config';
+import { fakeClient } from '../helpers/fake-client';
 
 describe('configureLongTail', () => {
   afterEach(() => resetLongTailConnection());
@@ -27,5 +28,21 @@ describe('configureLongTail', () => {
     expect(validConnection({ url: 'https://lt.example.com//', apiKey: 'k', requestTimeoutMs: 5 }, 'longTailTools'))
       .toEqual({ url: 'https://lt.example.com', apiKey: 'k', requestTimeoutMs: 5 });
     expect(() => validConnection({ url: 'nope', apiKey: 'k' }, 'longTailTools')).toThrow(/^longTailTools: url "nope"/);
+  });
+
+  it('stores an SDK client for Long Tail in process', () => {
+    const client = fakeClient();
+    configureLongTail({ client });
+    const configured = getLongTailConnection();
+    expect(isInProcess(configured)).toBe(true);
+    expect(configured).toEqual({ client });
+  });
+
+  it('rejects a client without the wait and tool calls, naming each', () => {
+    const client = fakeClient() as any;
+    delete client.escalations.openWait;
+    delete client.mcp;
+    expect(() => configureLongTail({ client })).toThrow(/client lacks escalations.openWait, mcp.callTool; pass createClient\(\) from @hotmeshio\/long-tail 0.37.0/);
+    expect(() => configureLongTail({ client: undefined as any })).toThrow(/url is required/);
   });
 });

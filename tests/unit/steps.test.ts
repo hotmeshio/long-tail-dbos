@@ -20,17 +20,17 @@ vi.mock('@dbos-inc/dbos-sdk', () => ({
   },
   Error: { DBOSConflictingRegistrationError: class extends Error {} },
 }));
-vi.mock('../../src/lt-client', () => ({ postOpenWait: vi.fn(), postCancel: vi.fn() }));
+vi.mock('../../src/lt-client', () => ({ requestOpenWait: vi.fn(), requestCancel: vi.fn() }));
 
 import { openWait } from '../../src/steps';
-import { postOpenWait } from '../../src/lt-client';
+import { requestOpenWait } from '../../src/lt-client';
 
 describe('lt.open / lt.close steps', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     dbos.workflowID = 'wf-1';
     dbos.getWorkflowStatus.mockResolvedValue({ workflowName: 'reviewOrder' });
-    (postOpenWait as any).mockResolvedValue({ escalationId: 'e-1', status: 'pending', created: true });
+    (requestOpenWait as any).mockResolvedValue({ escalationId: 'e-1', status: 'pending', created: true });
   });
 
   it('registers both steps at import with retries', () => {
@@ -41,7 +41,7 @@ describe('lt.open / lt.close steps', () => {
   it('opens the wait with the workflow id, type, key and SLA', async () => {
     const before = Date.now();
     const opened = await openWait('review', { role: 'reviewer', type: 'order-review', metadata: { orderId: 'o-1' }, timeout: '1h' });
-    const body = (postOpenWait as any).mock.calls[0][0];
+    const body = (requestOpenWait as any).mock.calls[0][0];
     expect(body).toMatchObject({ workflowId: 'wf-1', runScope: '', workflowType: 'reviewOrder', waitKey: 'review', role: 'reviewer', type: 'order-review', metadata: { orderId: 'o-1' } });
     const expires = Date.parse(body.expiresAt);
     expect(expires).toBeGreaterThanOrEqual(before + 3_600_000);
@@ -50,19 +50,19 @@ describe('lt.open / lt.close steps', () => {
 
   it('omits expiresAt without an SLA', async () => {
     await openWait('review', { role: 'reviewer', type: 't' });
-    expect((postOpenWait as any).mock.calls[0][0]).not.toHaveProperty('expiresAt');
+    expect((requestOpenWait as any).mock.calls[0][0]).not.toHaveProperty('expiresAt');
   });
 
   it('sends a batch or accumulate declaration with only the fields set', async () => {
     const filled = { left: { payload: { passed: true }, at: '2026-11-13T00:00:00.000Z' } };
     await openWait('inspect', { role: 'reviewer', type: 't', batch: ['left', 'right'], filled, partialOnTimeout: true });
-    const body = (postOpenWait as any).mock.calls[0][0];
+    const body = (requestOpenWait as any).mock.calls[0][0];
     expect(body).toMatchObject({ batch: ['left', 'right'], filled, partialOnTimeout: true });
     expect(body).not.toHaveProperty('accumulate');
     expect(body).not.toHaveProperty('wakeOnFill');
 
     await openWait('approvals', { role: 'reviewer', type: 't', accumulate: { max: 2 } });
-    expect((postOpenWait as any).mock.calls[1][0]).toMatchObject({ accumulate: { max: 2 } });
+    expect((requestOpenWait as any).mock.calls[1][0]).toMatchObject({ accumulate: { max: 2 } });
   });
 
   it('forwards the envelope, assignment, lineage and signal key, only the fields set', async () => {
@@ -78,12 +78,12 @@ describe('lt.open / lt.close steps', () => {
       signalKey: 'review-o-1',
     };
     await openWait('review', { role: 'reviewer', type: 't', ...fields, withResolution: true, maxWaitSeconds: 60 });
-    const body = (postOpenWait as any).mock.calls[0][0];
+    const body = (requestOpenWait as any).mock.calls[0][0];
     expect(body).toMatchObject(fields);
     for (const local of ['withResolution', 'maxWaitSeconds', 'timeout']) expect(body).not.toHaveProperty(local);
 
     await openWait('plain', { role: 'reviewer', type: 't', signalKey: 'plain-1' });
-    const plain = (postOpenWait as any).mock.calls[1][0];
+    const plain = (requestOpenWait as any).mock.calls[1][0];
     expect(plain.signalKey).toBe('plain-1');
     for (const unset of Object.keys(fields).filter((k) => k !== 'signalKey')) expect(plain).not.toHaveProperty(unset);
   });

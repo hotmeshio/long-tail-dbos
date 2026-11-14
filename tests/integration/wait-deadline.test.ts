@@ -5,7 +5,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import { conditional, configureLongTail } from '../../src';
 import { getLongTailConnection } from '../../src/config';
 import { STEP } from '../../src/constants';
-import { api, eventually, launchDbos, LT_DB, recreateDatabases, startLongTail, type Harness } from './harness';
+import { api, eventually, launchDbos, LT_DB, recreateDatabases, startLongTail, unreachableConnection, type Harness } from './harness';
 
 // The recv deadline passes while an outcome Long Tail committed is still
 // undelivered. Each test sets the database to that state: the row terminal,
@@ -105,7 +105,7 @@ describe('settling a wait at the recv deadline', () => {
     const { escalationId } = await startWait(key);
     await commitUndelivered(escalationId, 'resolved', { approved: false, notes: 'during outage' });
     const reachable = getLongTailConnection();
-    configureLongTail({ ...reachable, url: 'http://localhost:9' });
+    configureLongTail(unreachableConnection());
 
     await new Promise((r) => setTimeout(r, (DEADLINE_SECONDS + 3) * 1000));
     configureLongTail(reachable);

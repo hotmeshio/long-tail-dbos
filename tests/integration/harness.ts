@@ -1,26 +1,40 @@
 import { Client } from 'pg';
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import { start } from '@hotmeshio/long-tail';
+import { createClient, start } from '@hotmeshio/long-tail';
 
-import { configureLongTail } from '../../src';
+import { configureLongTail, type LongTailConnection } from '../../src';
 import { dbosProvider, type DbosProvider } from '../../src/provider';
 
 const PG = { host: 'localhost', port: Number(process.env.PG_PORT ?? 5425), user: 'postgres', password: 'password' };
 export const LT_DB = 'lt_dbos_e2e';
+const SYS_DB = 'lt_dbos_e2e_sys';
 const url = (db: string) => `postgresql://${PG.user}:${PG.password}@${PG.host}:${PG.port}/${db}`;
-// One database: Long Tail's tables and DBOS's system tables (dbos schema) side by side.
-export const SYS_URL = url(LT_DB);
+
+/**
+ * The deployment under test. LT_CONNECTION: `in-process` (the workflow calls
+ * Long Tail's SDK) or `http` (a bot key over the HTTP API). LT_DATABASES:
+ * `shared` (DBOS's system tables beside Long Tail's) or `separate` (each in
+ * its own database).
+ */
+export const DEPLOYMENT = {
+  connection: process.env.LT_CONNECTION === 'http' ? 'http' : 'in-process',
+  databases: process.env.LT_DATABASES === 'separate' ? 'separate' : 'shared',
+} as const;
+export const SYS_URL = url(DEPLOYMENT.databases === 'separate' ? SYS_DB : LT_DB);
 export const PORT = 3917;
 export const BASE = `http://localhost:${PORT}`;
 const ADMIN = { externalId: 'e2e-admin', password: 'e2e-pass-123' };
 
-/** Drop and recreate this suite's own database. Never touches longtail or longtail_test. */
+/** Drop and recreate this suite's own databases. Never touches longtail or longtail_test. */
 export async function recreateDatabases(): Promise<void> {
   const admin = new Client({ ...PG, database: 'postgres' });
   await admin.connect();
-  await admin.query('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()', [LT_DB]);
-  await admin.query(`DROP DATABASE IF EXISTS ${LT_DB}`);
+  for (const db of [LT_DB, SYS_DB]) {
+    await admin.query('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()', [db]);
+    await admin.query(`DROP DATABASE IF EXISTS ${db}`);
+  }
   await admin.query(`CREATE DATABASE ${LT_DB}`);
+  if (DEPLOYMENT.databases === 'separate') await admin.query(`CREATE DATABASE ${SYS_DB}`);
   await admin.end();
 }
 
@@ -39,7 +53,7 @@ export interface Harness {
   shutdown(): Promise<void>;
 }
 
-/** Long Tail in process with the DBOS provider, a reviewer role, and a bot key for the workflow side. */
+/** Long Tail in process with the DBOS provider, a reviewer role, and a bot the workflow side acts as. */
 export async function startLongTail(): Promise<Harness> {
   const provider = await dbosProvider({ systemDatabaseUrl: SYS_URL });
   const lt = await start({
@@ -53,10 +67,7 @@ export async function startLongTail(): Promise<Harness> {
 
   const login = await api<{ token: string; user: { id: string } }>('POST', '/api/auth/login', '', { username: ADMIN.externalId, password: ADMIN.password });
   const bot = await api<{ id: string }>('POST', '/api/bot-accounts', login.token, { name: 'dbos-workflows', roles: [{ role: 'reviewer', type: 'admin' }] });
-  const key = await api<Record<string, string>>('POST', `/api/bot-accounts/${bot.id}/api-keys`, login.token, { name: 'e2e' });
-  const apiKey = key.rawKey ?? key.key ?? key.api_key;
-  if (!apiKey) throw new Error(`no api key in ${JSON.stringify(key)}`);
-  configureLongTail({ url: BASE, apiKey });
+  configureLongTail(await workflowConnection(bot.id, login.token));
 
   return {
     provider,
@@ -67,6 +78,22 @@ export async function startLongTail(): Promise<Harness> {
       await provider.close();
     },
   };
+}
+
+/** The workflow side's connection to Long Tail, as the bot, for the deployment under test. */
+async function workflowConnection(botId: string, adminToken: string): Promise<LongTailConnection> {
+  if (DEPLOYMENT.connection === 'in-process') return { client: createClient({ auth: { userId: botId } }) };
+  const key = await api<Record<string, string>>('POST', `/api/bot-accounts/${botId}/api-keys`, adminToken, { name: 'e2e' });
+  const apiKey = key.rawKey ?? key.key ?? key.api_key;
+  if (!apiKey) throw new Error(`no api key in ${JSON.stringify(key)}`);
+  return { url: BASE, apiKey };
+}
+
+/** A connection to a Long Tail that does not answer, of the deployment's kind. */
+export function unreachableConnection(): LongTailConnection {
+  if (DEPLOYMENT.connection === 'http') return { url: 'http://localhost:9', apiKey: 'lt_bot_unreachable' };
+  const down = () => Promise.reject(new Error('Long Tail is down'));
+  return { client: { escalations: { openWait: down, get: down, cancel: down }, mcp: { callTool: down } } };
 }
 
 export async function api<T>(method: string, path: string, token: string, body?: unknown): Promise<T> {

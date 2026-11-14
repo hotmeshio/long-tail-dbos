@@ -53,15 +53,33 @@ Open http://localhost:3400, sign in as `superadmin` / `l0ngt@1l`, open the **rev
 
 Everything runs locally on one Postgres database: Long Tail's tables beside DBOS's system tables. The examples under [`examples/`](examples) show reviews, batch and accumulate waits, an MCP tool call, and a machine line whose route and changeover wait on machines through the same rows people resolve. The **Invoke Tool** starts any of them.
 
-In your own app, point the package at Long Tail before `DBOS.launch()`:
+## Deploy it
+
+Two choices, made independently: where Long Tail runs, and whether Long Tail and DBOS share a database.
+
+**Long Tail in your app's process.** Your DBOS app starts Long Tail and passes its SDK client before `DBOS.launch()`. `conditional()` and `longTailTools()` call Long Tail's API functions directly, with the same validation and role checks as the HTTP API, and no HTTP request or key.
 
 ```ts
+import { createClient } from '@hotmeshio/long-tail';
 import { configureLongTail } from '@hotmeshio/long-tail-dbos';
 
+configureLongTail({ client: createClient({ auth: { userId: workflowBotId } }) });
+```
+
+`workflowBotId` is a Long Tail bot account with write access to the roles your workflows use.
+
+**Long Tail as its own service.** Run Long Tail with the DBOS provider from this repo's image, or in your own code with `dbosProvider` from `@hotmeshio/long-tail-dbos/provider`. Your DBOS app calls it over HTTP with a key for that bot account:
+
+```ts
 configureLongTail({ url: process.env.LT_URL!, apiKey: process.env.LT_API_KEY! });
 ```
 
-`LT_API_KEY` is a Long Tail bot key with write access to the roles your workflows use. Run Long Tail with the DBOS provider from this repo's image, or in your own code with `dbosProvider` from `@hotmeshio/long-tail-dbos/provider`.
+**One database or two.** DBOS keeps its system tables in the `dbos` schema of the database it is given, so both can share one database. To keep them apart, give Long Tail `DATABASE_URL` and DBOS `DBOS_SYSTEM_DATABASE_URL`, on the same server or different ones. Long Tail connects to both: it delivers outcomes and lists workflows through the DBOS system database.
+
+| | One database | Two databases |
+|---|---|---|
+| In process | `DATABASE_URL` for both | `DATABASE_URL` for Long Tail, `DBOS_SYSTEM_DATABASE_URL` for DBOS |
+| Own service | Long Tail and the app's DBOS both use `DATABASE_URL` | Long Tail gets both; the app gets `DBOS_SYSTEM_DATABASE_URL` |
 
 ## Learn more
 
@@ -76,7 +94,8 @@ configureLongTail({ url: process.env.LT_URL!, apiKey: process.env.LT_API_KEY! })
 ```bash
 npm install
 npm test                    # unit tests
-npm run test:integration    # Long Tail and DBOS in process (docker compose up -d postgres)
+npm run test:integration    # Long Tail and DBOS in process (docker compose up -d postgres): SDK with
+                            # one database, then HTTP with two
 npm run test:e2e            # the running stack over HTTP (docker compose up -d --build)
 npm run build
 ```

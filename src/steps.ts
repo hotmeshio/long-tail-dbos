@@ -2,7 +2,7 @@ import { DBOS, Error as DBOSErrors } from '@dbos-inc/dbos-sdk';
 
 import { ESCALATION_STATUS, STEP, WAIT_DEFAULTS } from './constants';
 import { toMs } from './duration';
-import { getEscalation, postCancel, postOpenWait, type EscalationState } from './lt-client';
+import { requestCancel, requestEscalation, requestOpenWait, type EscalationState } from './lt-client';
 import type { LTCollectionConfig, LTConditionalConfig, LTWaitFields, LTWaitOutcome, OpenedWait } from './types';
 
 /** Open the escalation this workflow waits on. Runs as a checkpointed step. */
@@ -12,7 +12,7 @@ export async function openWait(waitKey: string, config: LTConditionalConfig): Pr
   const status = await DBOS.getWorkflowStatus(workflowId);
   const workflowType = status?.workflowName ?? null;
   const expiresAt = config.timeout !== undefined ? new Date(Date.now() + toMs(config.timeout)).toISOString() : null;
-  const opened = await postOpenWait({
+  const opened = await requestOpenWait({
     workflowId,
     runScope: '',
     ...(workflowType ? { workflowType } : {}),
@@ -55,12 +55,12 @@ function waitFieldsOf(config: LTConditionalConfig): LTWaitFields {
  */
 export async function closeWait(escalationId: string, waitKey: string): Promise<LTWaitOutcome> {
   // 1. Read the row
-  const row = await getEscalation(escalationId);
+  const row = await requestEscalation(escalationId);
   if (row.status !== ESCALATION_STATUS.PENDING) return outcomeOf(escalationId, waitKey, row);
 
   // 2. Cancel it, then read what was committed
-  await postCancel(escalationId);
-  const settled = await getEscalation(escalationId);
+  await requestCancel(escalationId);
+  const settled = await requestEscalation(escalationId);
   if (settled.status === ESCALATION_STATUS.PENDING) {
     throw new Error(`long-tail-dbos: escalation ${escalationId} is still pending after cancel`);
   }

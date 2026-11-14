@@ -8,13 +8,41 @@ export interface LTWaitOutcome {
   resolvedAt?: string;
 }
 
-export interface LongTailConnection {
+/** Long Tail as a separate service, over HTTP. */
+export interface LongTailHttpConnection {
   /** Long Tail base URL, e.g. https://longtail.example.com */
   url: string;
   /** Bot API key (lt_bot_...) or a JWT. */
   apiKey: string;
   /** Per-request timeout. Default 15 s. */
   requestTimeoutMs?: number;
+}
+
+/** Long Tail in this process: its SDK client, created with the workflow bot's identity. */
+export interface LongTailInProcessConnection {
+  /** `createClient({ auth: { userId } })` from @hotmeshio/long-tail 0.37.0 or later. */
+  client: LongTailClient;
+}
+
+export type LongTailConnection = LongTailHttpConnection | LongTailInProcessConnection;
+
+/** An SDK call's result, as Long Tail's api layer returns it. */
+export interface LongTailClientResult<T = unknown> {
+  status: number;
+  data?: T;
+  error?: string;
+}
+
+/** The part of Long Tail's SDK client the shim calls. */
+export interface LongTailClient {
+  escalations: {
+    openWait(input: Record<string, unknown>): Promise<LongTailClientResult>;
+    get(input: { id: string }): Promise<LongTailClientResult>;
+    cancel(input: { id: string }): Promise<LongTailClientResult>;
+  };
+  mcp: {
+    callTool(input: { id: string; toolName: string; arguments?: Record<string, unknown>; execute_as?: string }): Promise<LongTailClientResult>;
+  };
 }
 
 export interface LTConditionalConfig extends LTCollectionConfig, LTWaitFields {

@@ -46,6 +46,17 @@ export const LT_PATHS = {
   TOOL_CALL: (server: string, tool: string) => `/api/mcp/servers/${encodeURIComponent(server)}/tools/${encodeURIComponent(tool)}/call`,
 } as const;
 
+/** Long Tail SDK operations; an in-process call's LongTailRequestError names one as its context url. */
+export const LT_OPERATIONS = {
+  OPEN_WAIT: 'escalations.openWait',
+  ESCALATION: 'escalations.get',
+  CANCEL: 'escalations.cancel',
+  TOOL_CALL: 'mcp.callTool',
+} as const;
+
+/** The context method of an in-process call's LongTailRequestError. */
+export const IN_PROCESS_METHOD = 'SDK';
+
 export const STEP_PAGE_SIZE = 500;
 
 /** Connections the provider keeps for counting workflows in the executions list. */

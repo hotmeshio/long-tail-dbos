@@ -6,6 +6,7 @@ vi.mock('@dbos-inc/dbos-sdk', () => ({ DBOS: { runStep: dbos.runStep } }));
 import { configureLongTail, resetLongTailConnection } from '../../src/config';
 import { LongTailRequestError } from '../../src/lt-client';
 import { longTailTools } from '../../src/tools';
+import { fakeClient } from '../helpers/fake-client';
 
 function respond(status: number, body: unknown) {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -88,5 +89,29 @@ describe('longTailTools', () => {
     await expect(longTailTools().call('s', 't')).rejects.toThrow(/configureLongTail/);
     await expect(longTailTools({ url: 'not a url', apiKey: 'k' }).call('s', 't')).rejects.toThrow(/longTailTools: url/);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('calls through the SDK client when Long Tail runs in process', async () => {
+    const client = fakeClient();
+    client.mcp.callTool.mockResolvedValue({ status: 200, data: { result: 'ok' } });
+    configureLongTail({ client });
+    await expect(longTailTools().call('s', 't', { a: 1 })).resolves.toBe('ok');
+    expect(client.mcp.callTool).toHaveBeenCalledWith({ id: 's', toolName: 't', arguments: { a: 1 } });
+    expect(dbos.runStep).toHaveBeenCalledWith(expect.any(Function), { name: 'lt.tool:s/t' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('uses HTTP when given a url and key, even with Long Tail in process', async () => {
+    const client = fakeClient();
+    configureLongTail({ client });
+    fetchMock.mockResolvedValue(respond(200, { result: 1 }));
+    await longTailTools({ url: 'https://other.example.com', apiKey: 'other_key' }).call('s', 't');
+    expect(fetchMock.mock.calls[0][0]).toBe('https://other.example.com/api/mcp/servers/s/tools/t/call');
+    expect(client.mcp.callTool).not.toHaveBeenCalled();
+  });
+
+  it('refuses half an HTTP override when Long Tail runs in process', async () => {
+    configureLongTail({ client: fakeClient() });
+    await expect(longTailTools({ apiKey: 'k' }).call('s', 't')).rejects.toThrow(/url and apiKey are both required/);
   });
 });

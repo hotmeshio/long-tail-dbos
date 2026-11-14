@@ -1,6 +1,6 @@
-import { getLongTailConnection } from './config';
-import { LT_PATHS, WAIT_DEFAULTS } from './constants';
-import type { LTCollectionConfig, LTWaitFields, LongTailConnection } from './types';
+import { getLongTailConnection, isInProcess } from './config';
+import { IN_PROCESS_METHOD, LT_OPERATIONS, LT_PATHS, WAIT_DEFAULTS } from './constants';
+import type { LTCollectionConfig, LTWaitFields, LongTailClientResult, LongTailConnection, LongTailHttpConnection } from './types';
 
 /** A non-2xx response or transport failure from Long Tail. */
 export class LongTailRequestError extends Error {
@@ -37,9 +37,13 @@ export interface OpenWaitResponse {
   created: boolean;
 }
 
-/** POST /api/escalations/waits: idempotent on (workflowId, runScope, waitKey). */
-export function postOpenWait(body: OpenWaitBody): Promise<OpenWaitResponse> {
-  return request<OpenWaitResponse>('POST', LT_PATHS.OPEN_WAIT, body);
+/** Open a wait: idempotent on (workflowId, runScope, waitKey). */
+export function requestOpenWait(body: OpenWaitBody): Promise<OpenWaitResponse> {
+  const connection = getLongTailConnection();
+  if (isInProcess(connection)) {
+    return inProcess<OpenWaitResponse>(LT_OPERATIONS.OPEN_WAIT, () => connection.client.escalations.openWait({ ...body }));
+  }
+  return request<OpenWaitResponse>('POST', LT_PATHS.OPEN_WAIT, body, connection);
 }
 
 /** The fields of an escalation row that decide a wait's outcome. */
@@ -51,35 +55,65 @@ export interface EscalationState {
   updated_at?: string | null;
 }
 
-/** GET /api/escalations/:id. */
-export function getEscalation(escalationId: string): Promise<EscalationState> {
-  return request<EscalationState>('GET', LT_PATHS.ESCALATION(escalationId), undefined);
+/** Read an escalation. */
+export function requestEscalation(escalationId: string): Promise<EscalationState> {
+  const connection = getLongTailConnection();
+  if (isInProcess(connection)) {
+    return inProcess<EscalationState>(LT_OPERATIONS.ESCALATION, () => connection.client.escalations.get({ id: escalationId }));
+  }
+  return request<EscalationState>('GET', LT_PATHS.ESCALATION(escalationId), undefined, connection);
 }
 
-/** POST /api/escalations/:id/cancel. A row that is already closed is not an error. */
-export async function postCancel(escalationId: string): Promise<void> {
+/** Cancel an escalation. A row that is already closed is not an error. */
+export async function requestCancel(escalationId: string): Promise<void> {
+  const connection = getLongTailConnection();
   try {
-    await request('POST', LT_PATHS.CANCEL(escalationId), {});
+    if (isInProcess(connection)) {
+      await inProcess(LT_OPERATIONS.CANCEL, () => connection.client.escalations.cancel({ id: escalationId }));
+    } else {
+      await request('POST', LT_PATHS.CANCEL(escalationId), {}, connection);
+    }
   } catch (err) {
     if (err instanceof LongTailRequestError && err.status === 409) return;
     throw err;
   }
 }
 
-/** POST /api/mcp/servers/:server/tools/:tool/call. `server` is an MCP server's id or name. */
-export async function postToolCall<T>(
+/** Call a tool on an MCP server, by the server's id or name. */
+export async function requestToolCall<T>(
   connection: LongTailConnection,
   server: string,
   tool: string,
   args: Record<string, unknown>,
   executeAs?: string,
 ): Promise<T> {
+  if (isInProcess(connection)) {
+    const input = { id: server, toolName: tool, arguments: args, ...(executeAs ? { execute_as: executeAs } : {}) };
+    const reply = await inProcess<{ result: T }>(LT_OPERATIONS.TOOL_CALL, () => connection.client.mcp.callTool(input));
+    return reply.result;
+  }
   const body = { arguments: args, ...(executeAs ? { execute_as: executeAs } : {}) };
   const reply = await request<{ result: T }>('POST', LT_PATHS.TOOL_CALL(server, tool), body, connection);
   return reply.result;
 }
 
-async function request<T>(method: string, path: string, body: unknown, connection = getLongTailConnection()): Promise<T> {
+/** An SDK call; a non-2xx result throws as an HTTP reply would. */
+async function inProcess<T>(operation: string, call: () => Promise<LongTailClientResult>): Promise<T> {
+  const context = { method: IN_PROCESS_METHOD, url: operation };
+  let result: LongTailClientResult;
+  try {
+    result = await call();
+  } catch (err) {
+    throw new LongTailRequestError(`Long Tail ${operation} failed`, undefined, undefined, context, { cause: err });
+  }
+  if (result.status < 200 || result.status >= 300) {
+    const detail = result.error ? `: ${result.error}` : '';
+    throw new LongTailRequestError(`Long Tail ${operation} returned ${result.status}${detail}`, result.status, { error: result.error }, context);
+  }
+  return result.data as T;
+}
+
+async function request<T>(method: string, path: string, body: unknown, connection: LongTailHttpConnection): Promise<T> {
   const { url, apiKey, requestTimeoutMs } = connection;
   const target = `${url}${path}`;
   const controller = new AbortController();

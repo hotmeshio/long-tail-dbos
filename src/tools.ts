@@ -1,10 +1,11 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
 
-import { getLongTailConnection, validConnection } from './config';
+import { getLongTailConnection, isInProcess, validConnection } from './config';
 import { STEP } from './constants';
-import { postToolCall } from './lt-client';
+import { requestToolCall } from './lt-client';
 import type { LongTailConnection } from './types';
 
+/** Overrides the configured connection with Long Tail over HTTP. */
 export interface LongTailToolsOptions {
   /** Long Tail base URL; the configured connection's when absent. */
   url?: string;
@@ -30,14 +31,14 @@ export interface LongTailTools {
   call<T = unknown>(server: string, tool: string, args?: Record<string, unknown>, options?: LongTailToolCallOptions): Promise<T>;
 }
 
-/** Long Tail's MCP tools from DBOS code, over the configured connection unless `options` override it. */
+/** Long Tail's MCP tools from DBOS code, over the configured connection unless `options` name an HTTP one. */
 export function longTailTools(options: LongTailToolsOptions = {}): LongTailTools {
   return {
     async call<T = unknown>(server: string, tool: string, args: Record<string, unknown> = {}, callOptions: LongTailToolCallOptions = {}): Promise<T> {
       if (!server || !tool) throw new Error('longTailTools().call(server, tool): server and tool are required');
       const connection = connectionFor(options);
       return DBOS.runStep(
-        () => postToolCall<T>(connection, server, tool, args, callOptions.executeAs),
+        () => requestToolCall<T>(connection, server, tool, args, callOptions.executeAs),
         { name: `${STEP.TOOL}:${server}/${tool}` },
       );
     },
@@ -45,7 +46,12 @@ export function longTailTools(options: LongTailToolsOptions = {}): LongTailTools
 }
 
 function connectionFor(options: LongTailToolsOptions): LongTailConnection {
+  const overrides = options.url !== undefined || options.apiKey !== undefined;
   const configured = options.url && options.apiKey ? undefined : getLongTailConnection();
+  if (configured && isInProcess(configured)) {
+    if (overrides) throw new Error('longTailTools: url and apiKey are both required when Long Tail is configured in process');
+    return configured;
+  }
   return validConnection({
     url: options.url ?? configured!.url,
     apiKey: options.apiKey ?? configured!.apiKey,
