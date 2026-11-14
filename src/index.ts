@@ -7,5 +7,5 @@ export { STEP, WAIT_DEFAULTS } from './constants';
 export type {
   LTAccumulateConfig, LTAccumulatedItem, LTAccumulatorResult, LTBatchMarkers, LTCollectionConfig,
   LTConditionalConfig, LTEnvelope, LTFileRef, LTFilledEntry, LTLookupRef, LTOutcome, LTResolution, LTWaitFields, LTWithResolution,
-  LTWaitOutcome, LongTailConnection, OpenedWait,
+  LTWaitOutcome, LongTailClient, LongTailClientResult, LongTailConnection, LongTailHttpConnection, LongTailInProcessConnection, OpenedWait,
 } from './types';
