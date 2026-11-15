@@ -18,11 +18,18 @@ describe('DBOS status mapping', () => {
     expect(toJobState(status)).toBe(state);
   });
 
-  it('treats only waiting states as able to receive', () => {
-    expect(isTerminal('PENDING')).toBe(false);
-    expect(isTerminal('SUSPENDED')).toBe(false);
-    expect(isTerminal('SUCCESS')).toBe(true);
-    expect(isTerminal('CANCELLED')).toBe(true);
+  it.each([
+    ['PENDING', false],
+    ['ENQUEUED', false],
+    ['DELAYED', false],
+    ['SUSPENDED', false],
+    ['CANCELLED', false],
+    ['MAX_RECOVERY_ATTEMPTS_EXCEEDED', false],
+    ['SUCCESS', true],
+    ['ERROR', true],
+    ['SOMETHING_NEW', true],
+  ])('%s terminal is %s', (status, terminal) => {
+    expect(isTerminal(status)).toBe(terminal);
   });
 
   it('describes a found workflow with times', () => {

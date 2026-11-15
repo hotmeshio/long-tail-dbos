@@ -51,6 +51,18 @@ describe('DBOS provider', () => {
     expect(client.send).not.toHaveBeenCalled();
   });
 
+  it.each(['CANCELLED', 'MAX_RECOVERY_ATTEMPTS_EXCEEDED'])('delivers to a %s workflow so a resume reads the outcome', async (status) => {
+    client.getWorkflow.mockResolvedValueOnce({ status });
+    await expect(provider.deliver(REF, OUTCOME)).resolves.toBe('delivered');
+    expect(client.send).toHaveBeenCalledWith('wf-1', OUTCOME, 'review', 'e-1');
+  });
+
+  it('reports gone for a failed workflow without sending', async () => {
+    client.getWorkflow.mockResolvedValueOnce({ status: 'ERROR' });
+    await expect(provider.deliver(REF, OUTCOME)).resolves.toBe('gone');
+    expect(client.send).not.toHaveBeenCalled();
+  });
+
   it('reports gone when the workflow disappears before the send', async () => {
     client.send.mockRejectedValueOnce(new DBOSErrors.DBOSNonExistentWorkflowError('gone'));
     await expect(provider.deliver(REF, OUTCOME)).resolves.toBe('gone');

@@ -13,9 +13,12 @@ export function toJobState(status: string | undefined): LTJobState {
   return JOB_STATE.UNKNOWN;
 }
 
+/** DBOS resumes these with `resumeWorkflow`; a resumed workflow reads the messages sent while it was stopped. */
+const RESUMABLE: string[] = [StatusString.CANCELLED, StatusString.MAX_RECOVERY_ATTEMPTS_EXCEEDED];
+
 /** True once the workflow can no longer receive a message. */
 export function isTerminal(status: string): boolean {
-  return !RUNNING.includes(status);
+  return !RUNNING.includes(status) && !RESUMABLE.includes(status);
 }
 
 export function toJobStatus(workflowId: string, status: WorkflowStatus | undefined | null): LTJobStatus {
