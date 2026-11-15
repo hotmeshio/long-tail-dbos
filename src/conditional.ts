@@ -2,7 +2,7 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 
 import { CLOSE_REASON_DEADLINE, ESCALATION_STATUS, WAIT_DEFAULTS } from './constants';
 import { toMs } from './duration';
-import { ltClose, ltOpen } from './steps';
+import { ltClose, ltOpen, ltRead } from './steps';
 import type { LTConditionalConfig, LTOutcome, LTResolution, LTWaitOutcome, LTWithResolution, OpenedWait } from './types';
 
 const PRIORITIES = [1, 2, 3, 4];
@@ -50,15 +50,26 @@ export async function conditionalOutcome<T = Record<string, unknown>>(key: strin
   const opened = await ltOpen(key, config);
 
   // 2. Park until Long Tail delivers; DBOS defaults recv to 60 s, so the deadline is explicit
-  const delivered = await DBOS.recv<LTWaitOutcome>(key, { timeoutSeconds: waitSeconds(config) });
-  if (delivered) return outcomeOf<T>(delivered, opened);
+  for (;;) {
+    const delivered = await DBOS.recv<LTWaitOutcome>(key, { timeoutSeconds: waitSeconds(config) });
+    if (delivered) return outcomeOf<T>(delivered, opened);
+    if (hasDeadline(config)) break;
+    // A wait with no deadline parks again while its row is pending
+    const committed = await ltRead(opened.escalationId, key);
+    if (committed) return outcomeOf<T>(committed, opened);
+  }
 
-  // 3. No outcome means the backstop passed first: the row's own outcome decides
+  // 3. The deadline passed first: the row's own outcome decides
   DBOS.logger.warn(`long-tail-dbos: ${key} reached its recv deadline (${CLOSE_REASON_DEADLINE}); settling ${opened.escalationId}`);
   return outcomeOf<T>(await ltClose(opened.escalationId, key), opened);
 }
 
-/** recv deadline: the SLA plus a grace period, or the max wait when there is no SLA. */
+/** Whether the wait ends on its own: an SLA, or a `maxWaitSeconds`. */
+function hasDeadline(config: LTConditionalConfig): boolean {
+  return config.timeout !== undefined || config.maxWaitSeconds !== undefined;
+}
+
+/** Length of one recv: the SLA plus a grace period, else `maxWaitSeconds`, else one park. */
 export function waitSeconds(config: LTConditionalConfig): number {
   if (config.timeout !== undefined) {
     return Math.ceil(toMs(config.timeout) / 1000) + WAIT_DEFAULTS.GRACE_SECONDS;

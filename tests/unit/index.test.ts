@@ -14,7 +14,7 @@ describe('package entry', () => {
     expect(typeof entry.conditionalOutcome).toBe('function');
     expect(typeof entry.longTailTools).toBe('function');
     expect(typeof entry.configureLongTail).toBe('function');
-    expect(entry.STEP).toEqual({ OPEN: 'lt.open', CLOSE: 'lt.close', TOOL: 'lt.tool' });
+    expect(entry.STEP).toEqual({ OPEN: 'lt.open', CLOSE: 'lt.close', READ: 'lt.read', TOOL: 'lt.tool' });
   });
 
   it('keeps Long Tail out of the app-side entry', () => {

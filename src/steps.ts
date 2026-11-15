@@ -67,6 +67,12 @@ export async function closeWait(escalationId: string, waitKey: string): Promise<
   return outcomeOf(escalationId, waitKey, settled);
 }
 
+/** The outcome Long Tail committed for the wait, or null while its row is pending. */
+export async function readWait(escalationId: string, waitKey: string): Promise<LTWaitOutcome | null> {
+  const row = await requestEscalation(escalationId);
+  return row.status === ESCALATION_STATUS.PENDING ? null : outcomeOf(escalationId, waitKey, row);
+}
+
 /** The outcome a delivery would have carried for this row. */
 function outcomeOf(escalationId: string, waitKey: string, row: EscalationState): LTWaitOutcome {
   const data = typeof row.resolver_payload === 'string' ? JSON.parse(row.resolver_payload) : row.resolver_payload;
@@ -94,3 +100,4 @@ function register<Args extends unknown[], R>(fn: (...args: Args) => Promise<R>, 
 
 export const ltOpen = register(openWait, STEP.OPEN);
 export const ltClose = register(closeWait, STEP.CLOSE);
+export const ltRead = register(readWait, STEP.READ);

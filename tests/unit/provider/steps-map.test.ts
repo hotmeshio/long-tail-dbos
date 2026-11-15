@@ -57,6 +57,31 @@ describe('DBOS steps as a Long Tail timeline', () => {
     expect(pending.events.filter((e) => e.event_type === 'timer_started')).toHaveLength(1);
   });
 
+  it('keeps the wait open across a recv that received nothing, until lt.read returns an outcome', () => {
+    const outcome = { waitKey: 'review-1', escalationId: 'e-1', status: 'resolved' };
+    const step = (functionID: number, name: string, output: unknown) =>
+      ({ functionID, name, output, error: null, childWorkflowID: null, startedAtEpochMs: 1000 + functionID, completedAtEpochMs: 1001 + functionID });
+    const parked = [step(0, 'lt.open', { waitKey: 'review-1' }), step(1, 'DBOS.recv', null), step(3, 'lt.read', null)];
+    const signaled = (steps: unknown[]) =>
+      buildExecution(run.midStatus as any, steps as any).events.filter((e) => e.event_type === 'workflow_execution_signaled');
+
+    expect(signaled(parked)).toHaveLength(0);
+    const ended = signaled([...parked, step(4, 'DBOS.recv', null), step(6, 'lt.read', outcome)]);
+    expect(ended).toHaveLength(1);
+    expect(ended[0].attributes).toMatchObject({ signal_name: 'review-1', timeline_key: 'w:review-1', input: outcome });
+  });
+
+  it('ends the wait at the lt.close that settled it at the deadline', () => {
+    const outcome = { waitKey: 'review-1', escalationId: 'e-1', status: 'cancelled' };
+    const step = (functionID: number, name: string, output: unknown) =>
+      ({ functionID, name, output, error: null, childWorkflowID: null, startedAtEpochMs: 1000 + functionID, completedAtEpochMs: 1001 + functionID });
+    const { events } = buildExecution(run.midStatus as any, [step(0, 'lt.open', { waitKey: 'review-1' }), step(1, 'DBOS.recv', null), step(3, 'lt.close', outcome)] as any);
+    const ended = events.filter((e) => e.event_type === 'workflow_execution_signaled');
+    expect(ended).toHaveLength(1);
+    expect(ended[0].attributes).toMatchObject({ signal_name: 'review-1', input: outcome });
+    expect(events.find((e) => e.attributes.activity_type === 'lt.close')?.is_system).toBe(true);
+  });
+
   it('drops system steps and results when asked', () => {
     const sparse = buildExecution(run.status as any, run.steps as any, { excludeSystem: true, omitResults: true });
     expect(sparse.events.some((e) => e.is_system)).toBe(false);
