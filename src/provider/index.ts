@@ -60,7 +60,7 @@ export function createDbosProvider(client: DbosClientLike, countWorkflows?: Work
     capabilities: { native: false, execution: true, terminate: true, list: !!countWorkflows, start: true },
 
     async deliver(ref: LTWaitRef, outcome: LTWaitOutcome): Promise<LTDeliveryResult> {
-      // A send to a finished workflow is stored and never read, so check first.
+      // A send to a workflow that finished or failed is stored and never read, so check first.
       const status = await client.getWorkflow(ref.workflowId);
       if (!status || isTerminal(status.status)) return DELIVERY_RESULT.GONE;
       try {

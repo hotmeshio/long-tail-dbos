@@ -25,7 +25,7 @@ vi.mock('../../src/lt-client', () => ({ requestOpenWait: vi.fn(), requestCancel:
 import { openWait } from '../../src/steps';
 import { requestOpenWait } from '../../src/lt-client';
 
-describe('lt.open / lt.close steps', () => {
+describe('lt.open, lt.close and lt.read steps', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     dbos.workflowID = 'wf-1';
@@ -33,8 +33,8 @@ describe('lt.open / lt.close steps', () => {
     (requestOpenWait as any).mockResolvedValue({ escalationId: 'e-1', status: 'pending', created: true });
   });
 
-  it('registers both steps at import with retries', () => {
-    expect(dbos.registered.map((c) => c.name)).toEqual(['lt.open', 'lt.close']);
+  it('registers the steps at import with retries', () => {
+    expect(dbos.registered.map((c) => c.name)).toEqual(['lt.open', 'lt.close', 'lt.read']);
     for (const config of dbos.registered) expect(config).toMatchObject({ retriesAllowed: true, maxAttempts: 10 });
   });
 

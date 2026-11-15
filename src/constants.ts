@@ -2,6 +2,7 @@
 export const STEP = {
   OPEN: 'lt.open',
   CLOSE: 'lt.close',
+  READ: 'lt.read',
   /** Prefix of a tool call's step name: `lt.tool:<server>/<tool>`. */
   TOOL: 'lt.tool',
 } as const;
@@ -33,7 +34,7 @@ export const PROVIDER_NAME = 'dbos';
 export const WAIT_DEFAULTS = {
   /** Added to the SLA so Long Tail's expiry reaches the workflow before the recv deadline. */
   GRACE_SECONDS: 10 * 60,
-  /** recv deadline when the wait has no SLA. */
+  /** Length of one park when the wait has no SLA and no `maxWaitSeconds`. */
   MAX_WAIT_SECONDS: 365 * 24 * 60 * 60,
   OPEN_ATTEMPTS: 10,
   REQUEST_TIMEOUT_MS: 15_000,

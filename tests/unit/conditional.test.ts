@@ -12,10 +12,10 @@ vi.mock('@dbos-inc/dbos-sdk', () => ({
     get logger() { return { warn: dbos.warn }; },
   },
 }));
-vi.mock('../../src/steps', () => ({ ltOpen: vi.fn(), ltClose: vi.fn() }));
+vi.mock('../../src/steps', () => ({ ltOpen: vi.fn(), ltClose: vi.fn(), ltRead: vi.fn() }));
 
 import { conditional, waitSeconds } from '../../src/conditional';
-import { ltClose, ltOpen } from '../../src/steps';
+import { ltClose, ltOpen, ltRead } from '../../src/steps';
 import { WAIT_DEFAULTS } from '../../src/constants';
 
 const CONFIG = { role: 'reviewer', type: 'order-review', timeout: '1h' };
@@ -63,6 +63,35 @@ describe('conditional', () => {
     await expect(conditional('review', CONFIG)).resolves.toEqual({ $trigger: 'timeout' });
   });
 
+  it('parks again while a wait with no deadline is pending', async () => {
+    const open = { role: 'reviewer', type: 'order-review' };
+    dbos.recv.mockResolvedValueOnce(null).mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ waitKey: 'review', escalationId: 'e-1', status: 'resolved', data: { approved: true } });
+    (ltRead as any).mockResolvedValue(null);
+    await expect(conditional('review', open)).resolves.toEqual({ approved: true });
+    expect(dbos.recv).toHaveBeenCalledTimes(3);
+    expect(dbos.recv).toHaveBeenCalledWith('review', { timeoutSeconds: WAIT_DEFAULTS.MAX_WAIT_SECONDS });
+    expect(ltRead).toHaveBeenCalledTimes(2);
+    expect(ltRead).toHaveBeenCalledWith('e-1', 'review');
+    expect(ltClose).not.toHaveBeenCalled();
+  });
+
+  it('returns the outcome a wait with no deadline reads from its row', async () => {
+    dbos.recv.mockResolvedValue(null);
+    (ltRead as any).mockResolvedValueOnce({ waitKey: 'review', escalationId: 'e-1', status: 'resolved', data: { approved: false } });
+    await expect(conditional('review', { role: 'reviewer', type: 'order-review' })).resolves.toEqual({ approved: false });
+    expect(dbos.recv).toHaveBeenCalledTimes(1);
+    expect(ltClose).not.toHaveBeenCalled();
+  });
+
+  it('cancels at maxWaitSeconds when the wait sets one', async () => {
+    dbos.recv.mockResolvedValue(null);
+    (ltClose as any).mockResolvedValueOnce({ waitKey: 'review', escalationId: 'e-1', status: 'cancelled' });
+    await expect(conditional('review', { role: 'reviewer', type: 'order-review', maxWaitSeconds: 120 })).resolves.toBeNull();
+    expect(dbos.recv).toHaveBeenCalledWith('review', { timeoutSeconds: 120 });
+    expect(ltRead).not.toHaveBeenCalled();
+  });
+
   it('returns null when a step recorded by an earlier version replays with no outcome', async () => {
     dbos.recv.mockResolvedValue(null);
     (ltClose as any).mockResolvedValueOnce(undefined);
@@ -88,7 +117,7 @@ describe('waitSeconds', () => {
     expect(waitSeconds({ role: 'r', type: 't', timeout: 90_000 })).toBe(90 + WAIT_DEFAULTS.GRACE_SECONDS);
   });
 
-  it('uses maxWaitSeconds, else a year, without an SLA', () => {
+  it('uses maxWaitSeconds, else one park, without an SLA', () => {
     expect(waitSeconds({ role: 'r', type: 't', maxWaitSeconds: 120 })).toBe(120);
     expect(waitSeconds({ role: 'r', type: 't' })).toBe(WAIT_DEFAULTS.MAX_WAIT_SECONDS);
   });

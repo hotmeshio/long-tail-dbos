@@ -33,7 +33,7 @@ A reviewer claims the review in the Long Tail dashboard, fills in the role's for
 - **Queues by role.** Each wait lands in a role. Members work their queues; admins see everything.
 - **Forms.** The role declares the form and its schema, and every submission is validated before it reaches the workflow.
 - **Claims.** One person works an item at a time, under a time-boxed claim.
-- **Deadlines.** `timeout` becomes the escalation's expiry, enforced by Long Tail.
+- **Deadlines.** `timeout` becomes the escalation's expiry, enforced by Long Tail. A wait with no `timeout` stays open until someone resolves or cancels it.
 - **A dashboard.** Queues, escalation detail, your DBOS workflows and each one's timeline.
 - **API and MCP.** Anything a person does in the dashboard, a service or an agent does over HTTP or MCP, under the same permissions. `longTailTools()` calls Long Tail's MCP tools from a DBOS step.
 - **Invoke and schedules.** Register a DBOS workflow, and people, services and agents start it from the dashboard, HTTP or MCP, or Long Tail starts it on a cron schedule.

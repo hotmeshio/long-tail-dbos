@@ -57,7 +57,7 @@ export interface LTConditionalConfig extends LTCollectionConfig, LTWaitFields {
   data?: Record<string, unknown>;
   /** Escalation SLA: '48h', '30m', '10s', '2d', or milliseconds. */
   timeout?: string | number;
-  /** recv backstop when there is no SLA, in seconds. Default 365 days. */
+  /** Without an SLA: seconds after which the wait is cancelled. Unset, the wait stays open until Long Tail ends it. */
   maxWaitSeconds?: number;
   /** `conditional()` only: add `$resolution` (who resolved it, and when) to a resolved payload. */
   withResolution?: boolean;

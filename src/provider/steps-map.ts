@@ -21,7 +21,7 @@ type Category = LTWorkflowExecutionEvent['category'];
  * DBOS status + steps as the Long Tail execution timeline.
  *
  * - User steps become activity scheduled/completed (or failed) pairs.
- * - `lt.open` starts a signal wait; the next `DBOS.recv` ends it.
+ * - `lt.open` starts a signal wait; the recv that received an outcome ends it, or the `lt.close` or `lt.read` that returned one.
  * - A timed recv writes its deadline as `DBOS.sleep` at the next function id; it is folded in.
  * - A child start and its `DBOS.getResult` pair on the child id.
  * - Steps record outputs only; DBOS does not store step inputs.
@@ -57,9 +57,16 @@ export function buildExecution(status: WorkflowStatus, steps: DbosStep[], option
         push('signal_wait_started', 'signal', end ?? start, { signal_name: waitKey, timeline_key: `w:${waitKey}` });
       }
     } else if (step.name === DBOS_OP.RECV) {
+      if (openWaitKey && end !== undefined && !step.output) continue;
       const key = openWaitKey ?? `recv:${step.functionID}`;
       push('workflow_execution_signaled', 'signal', end, { signal_name: key, timeline_key: `w:${key}`, input: result(step.output) });
       openWaitKey = null;
+    } else if (step.name === STEP.CLOSE || step.name === STEP.READ) {
+      pushActivity(push, step, true, result);
+      if (openWaitKey && step.output) {
+        push('workflow_execution_signaled', 'signal', end, { signal_name: openWaitKey, timeline_key: `w:${openWaitKey}`, input: result(step.output) });
+        openWaitKey = null;
+      }
     } else if (step.name === DBOS_OP.SLEEP) {
       if (isRecvDeadline(step, byId)) continue;
       const duration = start !== undefined && end !== undefined ? end - start : null;
