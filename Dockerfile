@@ -13,7 +13,7 @@ RUN npm run build
 FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-ARG LONG_TAIL_SPEC=@hotmeshio/long-tail@^0.36.1
+ARG LONG_TAIL_SPEC=@hotmeshio/long-tail@^0.38.0
 RUN echo '{"name":"long-tail-dbos-runtime","private":true}' > package.json \
   && npm install --no-audit --no-fund --ignore-scripts @dbos-inc/dbos-sdk@^5.5.0 pg@^8.23.1 "$LONG_TAIL_SPEC"
 COPY --from=builder /app/build ./build

@@ -36,16 +36,19 @@ services:
       - "${LT_PORT:-3400}:3000"
     depends_on:
       postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
 
+  # The DBOS app runs Long Tail in its own process, on the same database as the dashboard.
+  # The dashboard container creates the tables on first boot, then the app starts.
   examples:
     build: { context: ., target: example }
     environment:
-      LT_URL: http://long-tail:3000
-      LT_API_KEY: ${LT_API_KEY:-}
-      # Local demo: with no LT_API_KEY, the app signs in as the admin and mints a bot key.
-      LT_ADMIN_USER: superadmin
-      LT_ADMIN_PASSWORD: ${LT_ADMIN_PASSWORD:-l0ngt@1l}
-      DBOS_SYSTEM_DATABASE_URL: postgresql://postgres:password@postgres:5432/longtail
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/longtail
+      JWT_SECRET: ${JWT_SECRET:-change-me-local-only}
       # Stable identity per replica: a restarted container recovers its own parked waits.
       DBOS__VMID: examples-1
       # Pinned version: a redeploy recovers waits parked by earlier code. Change code paths with DBOS.patch.
@@ -53,8 +56,7 @@ services:
     ports:
       - "${APP_PORT:-4000}:4000"
     depends_on:
-      postgres: { condition: service_healthy }
-      long-tail: { condition: service_started }
+      long-tail: { condition: service_healthy }
 
 volumes:
   pgdata:

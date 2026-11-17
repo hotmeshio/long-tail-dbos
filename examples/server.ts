@@ -1,19 +1,17 @@
 import { createServer } from 'http';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 
-import { configureLongTail } from '../src';
-import { bootstrapApiKey } from './bootstrap';
+import { connectLongTail } from './long-tail';
 import { LINE_QUEUE } from './machine-line';
 import { ORDERS_QUEUE, reviewOrder } from './review-order/workflow';
 
-// The example DBOS app process: the review-order and machine-line workflows.
+// The example DBOS app process: the review-order and machine-line workflows, with Long Tail running in process.
 // POST /orders/:id starts a review; the wait shows up in Long Tail. ?sla=30m sets the deadline (default 48h).
 // Long Tail starts the invocable workflows on the orders and line queues (examples/long-tail.json).
 // DBOS__VMID and DBOS__APPVERSION are fixed per replica so a restart recovers its parked waits.
 async function main(): Promise<void> {
-  const url = process.env.LT_URL ?? 'http://localhost:3400';
-  configureLongTail({ url, apiKey: process.env.LT_API_KEY || (await bootstrapApiKey(url)) });
-  DBOS.setConfig({ name: 'review-order', systemDatabaseUrl: process.env.DBOS_SYSTEM_DATABASE_URL });
+  await connectLongTail();
+  DBOS.setConfig({ name: 'review-order', systemDatabaseUrl: process.env.DBOS_SYSTEM_DATABASE_URL || process.env.DATABASE_URL });
   await DBOS.launch();
   await DBOS.registerQueue(ORDERS_QUEUE);
   await DBOS.registerQueue(LINE_QUEUE);
