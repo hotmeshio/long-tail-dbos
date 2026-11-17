@@ -55,9 +55,7 @@ Everything runs locally on one Postgres database: Long Tail's tables beside DBOS
 
 ## Deploy it
 
-Two choices, made independently: where Long Tail runs, and whether Long Tail and DBOS share a database.
-
-**Long Tail in your app's process.** Your DBOS app starts Long Tail and passes its SDK client before `DBOS.launch()`. `conditional()` and `longTailTools()` call Long Tail's API functions directly, with the same validation and role checks as the HTTP API, and no HTTP request or key.
+Long Tail runs in your app's process. Your DBOS app starts Long Tail with `dbosProvider` from `@hotmeshio/long-tail-dbos/provider` and passes its SDK client before `DBOS.launch()`. `conditional()` and `longTailTools()` call Long Tail's functions directly, with the same validation and role checks as the HTTP API.
 
 ```ts
 import { createClient } from '@hotmeshio/long-tail';
@@ -68,18 +66,7 @@ configureLongTail({ client: createClient({ auth: { userId: workflowBotId } }) })
 
 `workflowBotId` is a Long Tail bot account with write access to the roles your workflows use.
 
-**Long Tail as its own service.** Run Long Tail with the DBOS provider from this repo's image, or in your own code with `dbosProvider` from `@hotmeshio/long-tail-dbos/provider`. Your DBOS app calls it over HTTP with a key for that bot account:
-
-```ts
-configureLongTail({ url: process.env.LT_URL!, apiKey: process.env.LT_API_KEY! });
-```
-
-**One database or two.** DBOS keeps its system tables in the `dbos` schema of the database it is given, so both can share one database. To keep them apart, give Long Tail `DATABASE_URL` and DBOS `DBOS_SYSTEM_DATABASE_URL`, on the same server or different ones. Long Tail connects to both: it delivers outcomes and lists workflows through the DBOS system database.
-
-| | One database | Two databases |
-|---|---|---|
-| In process | `DATABASE_URL` for both | `DATABASE_URL` for Long Tail, `DBOS_SYSTEM_DATABASE_URL` for DBOS |
-| Own service | Long Tail and the app's DBOS both use `DATABASE_URL` | Long Tail gets both; the app gets `DBOS_SYSTEM_DATABASE_URL` |
+**One database or two.** DBOS keeps its system tables in the `dbos` schema of the database it is given, so both can share one database: set `DATABASE_URL`. To keep them apart, give Long Tail `DATABASE_URL` and DBOS `DBOS_SYSTEM_DATABASE_URL`, on the same server or different ones. Long Tail connects to both: it delivers outcomes and lists workflows through the DBOS system database.
 
 ## Learn more
 
