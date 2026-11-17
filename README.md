@@ -51,7 +51,7 @@ curl -X POST localhost:4000/orders/42    # starts a review for order 42
 
 Open http://localhost:3400, sign in as `superadmin` / `l0ngt@1l`, open the **reviewer** queue, claim the review and resolve it.
 
-Everything runs locally on one Postgres database: Long Tail's tables beside DBOS's system tables. The examples under [`examples/`](examples) show reviews, batch and accumulate waits, an MCP tool call, and a machine line whose route and changeover wait on machines through the same rows people resolve. The **Invoke Tool** starts any of them.
+Everything runs locally on one Postgres database: Long Tail's tables beside DBOS's system tables. The example app runs Long Tail in its own process ([`examples/long-tail.ts`](examples/long-tail.ts)), on the same database as the dashboard. The examples under [`examples/`](examples) show reviews, batch and accumulate waits, an MCP tool call, and a machine line whose route and changeover wait on machines through the same rows people resolve. The **Invoke Tool** starts any of them.
 
 ## Deploy it
 
