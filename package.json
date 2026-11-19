@@ -1,6 +1,6 @@
 {
   "name": "@hotmeshio/long-tail-dbos",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "Long Tail escalations for DBOS workflows: one call, conditional().",
   "homepage": "https://hotmesh.io",
   "license": "SEE LICENSE IN LICENSE",
@@ -31,11 +31,11 @@
   },
   "peerDependencies": {
     "@dbos-inc/dbos-sdk": "^5.5.0",
-    "@hotmeshio/long-tail": "^0.36.1 || ^0.37.0 || ^0.38.0"
+    "@hotmeshio/long-tail": "^0.36.1 || ^0.37.0 || ^0.38.0 || ^0.39.0"
   },
   "devDependencies": {
     "@dbos-inc/dbos-sdk": "^5.5.0",
-    "@hotmeshio/long-tail": "^0.38.0",
+    "@hotmeshio/long-tail": "^0.39.0",
     "@types/node": "^22.20.5",
     "@types/pg": "^8.23.1",
     "socket.io-client": "^4.8.4",
